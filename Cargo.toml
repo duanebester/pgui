@@ -5,6 +5,13 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0"
+async-channel = "2.3"
+async-std = "1"
+futures = "0.3"
 gpui = { git = "https://github.com/zed-industries/zed.git" }
 gpui-component = { git = "https://github.com/longbridge/gpui-component.git" }
+hex = "0.4"
 rust-embed = "8.2.0"
+rust_decimal = "1.37.1"
+serde = { version = "1" }
+sqlx = { version = "0.8", features = [ "runtime-async-std", "tls-native-tls", "postgres", "rust_decimal" ] }

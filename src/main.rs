@@ -1,5 +1,8 @@
 mod assets;
+mod database;
+mod database_panel;
 mod editor;
+mod results_panel;
 mod window;
 mod workspace;
 

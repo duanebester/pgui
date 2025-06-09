@@ -1,15 +1,238 @@
+use std::{ops::Range, time::Duration};
+
 use crate::database::{QueryExecutionResult, QueryResult};
 use gpui::*;
-use gpui_component::{ActiveTheme as _, StyledExt, h_flex, label::Label, v_flex};
+use gpui_component::{
+    ActiveTheme as _, h_flex, label::Label, v_flex, Size, StyleSized,
+    table::{self, ColFixed, Table, TableDelegate},
+};
+use serde::Deserialize;
+
+#[derive(Clone, PartialEq, Eq, Deserialize)]
+struct ChangeSize(Size);
 
 pub struct ResultsPanel {
     current_result: Option<QueryExecutionResult>,
+    table: Entity<Table<ResultsTableDelegate>>,
+    size: Size,
+}
+
+impl_internal_actions!(results_panel, [ChangeSize]);
+
+struct ResultsTableDelegate {
+    columns: Vec<String>,
+    rows: Vec<Vec<String>>,
+    size: Size,
+    col_resize: bool,
+    col_order: bool,
+    col_selection: bool,
+    loading: bool,
+    fixed_cols: bool,
+    visible_rows: Range<usize>,
+    visible_cols: Range<usize>,
+}
+
+impl ResultsTableDelegate {
+    fn new() -> Self {
+        Self {
+            size: Size::default(),
+            rows: vec![],
+            columns: vec![],
+            col_resize: false,
+            col_order: false,
+            col_selection: false,
+            fixed_cols: true,
+            loading: false,
+            visible_cols: Range::default(),
+            visible_rows: Range::default(),
+        }
+    }
+
+    pub fn update(&mut self, result: QueryResult) {
+        self.rows = result.rows.clone();
+        self.columns = result.columns.clone();
+    }
+}
+
+impl TableDelegate for ResultsTableDelegate {
+    fn cols_count(&self, _: &App) -> usize {
+        self.columns.len()
+    }
+
+    fn rows_count(&self, _: &App) -> usize {
+        self.rows.len()
+    }
+
+    fn col_name(&self, col_ix: usize, _: &App) -> SharedString {
+        if let Some(col) = self.columns.get(col_ix) {
+            col.clone().into()
+        } else {
+            "--".into()
+        }
+    }
+
+    fn col_width(&self, col_ix: usize, _: &App) -> Pixels {
+        if col_ix < 10 {
+            120.0.into()
+        } else if col_ix < 20 {
+            80.0.into()
+        } else {
+            130.0.into()
+        }
+    }
+
+    fn col_padding(&self, col_ix: usize, _: &App) -> Option<Edges<Pixels>> {
+        if col_ix >= 3 && col_ix <= 10 {
+            Some(Edges::all(px(0.)))
+        } else {
+            None
+        }
+    }
+
+    fn col_fixed(&self, col_ix: usize, _: &App) -> Option<table::ColFixed> {
+        if !self.fixed_cols {
+            return None;
+        }
+
+        if col_ix < 4 {
+            Some(ColFixed::Left)
+        } else {
+            None
+        }
+    }
+
+    fn can_resize_col(&self, col_ix: usize, _: &App) -> bool {
+        return self.col_resize && col_ix > 1;
+    }
+
+    fn can_select_col(&self, _: usize, _: &App) -> bool {
+        return self.col_selection;
+    }
+
+    fn render_th(
+        &self,
+        col_ix: usize,
+        _: &mut Window,
+        cx: &mut Context<Table<Self>>,
+    ) -> impl IntoElement {
+        let th = div().child(self.col_name(col_ix, cx));
+
+        if col_ix >= 3 && col_ix <= 10 {
+            th.table_cell_size(self.size)
+        } else {
+            th
+        }
+    }
+
+    fn render_tr(
+        &self,
+        row_ix: usize,
+        _: &mut Window,
+        cx: &mut Context<Table<Self>>,
+    ) -> gpui::Stateful<gpui::Div> {
+        div()
+            .id(row_ix)
+            .on_click(cx.listener(|_, ev: &ClickEvent, _, _| {
+                println!(
+                    "You have clicked row with secondary: {}",
+                    ev.modifiers().secondary()
+                )
+            }))
+    }
+
+    fn render_td(
+        &self,
+        row_ix: usize,
+        col_ix: usize,
+        _: &mut Window,
+        _cx: &mut Context<Table<Self>>,
+    ) -> impl IntoElement {
+        if let Some(row) = self.rows.get(row_ix) {
+            if let Some(cell_value) = row.get(col_ix) {
+                return cell_value.clone().into_any_element();
+            }
+        }
+
+        "--".into_any_element()
+    }
+
+    fn can_loop_select(&self, _: &App) -> bool {
+        false
+    }
+
+    fn can_move_col(&self, _: usize, _: &App) -> bool {
+        self.col_order
+    }
+
+    fn move_col(
+        &mut self,
+        col_ix: usize,
+        to_ix: usize,
+        _: &mut Window,
+        _: &mut Context<Table<Self>>,
+    ) {
+        let col = self.columns.remove(col_ix);
+        self.columns.insert(to_ix, col);
+    }
+
+    fn loading(&self, _: &App) -> bool {
+        false
+    }
+
+    fn can_load_more(&self, _: &App) -> bool {
+        false
+    }
+
+    fn load_more_threshold(&self) -> usize {
+        150
+    }
+
+    fn load_more(&mut self, _: &mut Window, cx: &mut Context<Table<Self>>) {
+        self.loading = true;
+        cx.spawn(async move |view, cx| {
+            // Simulate network request, delay 1s to load data.
+            Timer::after(Duration::from_secs(1)).await;
+            cx.update(|cx| {
+                let _ = view.update(cx, |view, _| {
+                    view.delegate_mut().loading = false;
+                });
+            })
+        })
+        .detach();
+    }
+
+    fn visible_rows_changed(
+        &mut self,
+        visible_range: Range<usize>,
+        _: &mut Window,
+        _: &mut Context<Table<Self>>,
+    ) {
+        self.visible_rows = visible_range;
+    }
+
+    fn visible_cols_changed(
+        &mut self,
+        visible_range: Range<usize>,
+        _: &mut Window,
+        _: &mut Context<Table<Self>>,
+    ) {
+        self.visible_cols = visible_range;
+    }
 }
 
 impl ResultsPanel {
-    pub fn new(_window: &mut Window, _cx: &mut Context<Self>) -> Self {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let delegate = ResultsTableDelegate::new();
+        let table = cx.new(|cx| {
+            let mut t = Table::new(delegate, window, cx);
+            t.set_stripe(true, cx);
+            t
+        });
+
         Self {
             current_result: None,
+            table,
+            size: Size::default(),
         }
     }
 
@@ -18,99 +241,34 @@ impl ResultsPanel {
     }
 
     pub fn update_result(&mut self, result: QueryExecutionResult, cx: &mut Context<Self>) {
-        self.current_result = Some(result);
+        self.current_result = Some(result.clone());
+        if let QueryExecutionResult::Select(x) = result {
+            self.table.update(cx, |table, cx| {
+                table.delegate_mut().update(x.clone());
+                table.refresh(cx);
+            });
+        }
         cx.notify();
+    }
+
+    fn on_change_size(&mut self, a: &ChangeSize, _: &mut Window, cx: &mut Context<Self>) {
+        self.size = a.0;
+        self.table.update(cx, |table, cx| {
+            table.set_size(a.0, cx);
+            table.delegate_mut().size = a.0;
+        });
     }
 
     #[allow(dead_code)]
     pub fn clear_results(&mut self, cx: &mut Context<Self>) {
         self.current_result = None;
-        cx.notify();
-    }
-
-    fn render_query_result(
-        &self,
-        result: &QueryResult,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
-        if result.columns.is_empty() {
-            return v_flex().p_4().child(
-                Label::new(format!(
-                    "Query completed successfully. {} rows returned in {}ms",
-                    result.row_count, result.execution_time_ms
-                ))
-                .text_sm()
-                .text_color(cx.theme().muted_foreground),
+        self.table.update(cx, |table, cx| {
+            table.delegate_mut().update(
+                QueryResult { columns: vec![], rows: vec![], row_count: 0, execution_time_ms: 0 }
             );
-        }
-
-        let header = h_flex()
-            .w_full()
-            .border_b_1()
-            .border_color(cx.theme().border)
-            .bg(cx.theme().list_even)
-            .children(result.columns.iter().map(|col| {
-                div()
-                    .flex_1()
-                    .p_2()
-                    .border_r_1()
-                    .border_color(cx.theme().border)
-                    .child(
-                        Label::new(col.clone())
-                            .font_bold()
-                            .text_xs()
-                            .whitespace_nowrap(),
-                    )
-            }));
-
-        let rows_content = result.rows.iter().enumerate().map(|(row_idx, row)| {
-            let bg_color = if row_idx % 2 == 0 {
-                cx.theme().list
-            } else {
-                cx.theme().list_even
-            };
-
-            h_flex()
-                .w_full()
-                .bg(bg_color)
-                .border_b_1()
-                .border_color(cx.theme().border.opacity(0.3))
-                .children(row.iter().map(|cell| {
-                    div()
-                        .flex_1()
-                        .p_2()
-                        .border_r_1()
-                        .border_color(cx.theme().border.opacity(0.3))
-                        .child(Label::new(cell.clone()).text_xs().whitespace_nowrap())
-                }))
+            table.refresh(cx);
         });
-
-        let footer = h_flex()
-            .justify_between()
-            .items_center()
-            .p_2()
-            .border_t_1()
-            .border_color(cx.theme().border)
-            .bg(cx.theme().list_even.opacity(0.5))
-            .child(
-                Label::new(format!("{} rows returned", result.row_count))
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground),
-            )
-            .child(
-                Label::new(format!("Executed in {}ms", result.execution_time_ms))
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground),
-            );
-
-        v_flex()
-            .border_1()
-            .border_color(cx.theme().border)
-            .rounded(cx.theme().radius)
-            .overflow_hidden()
-            .child(header)
-            .child(div().flex_1().overflow_hidden().children(rows_content))
-            .child(footer)
+        cx.notify();
     }
 }
 
@@ -122,10 +280,10 @@ impl Render for ResultsPanel {
                     .text_sm()
                     .text_color(cx.theme().muted_foreground),
             ),
-            Some(QueryExecutionResult::Select(result)) => v_flex()
+            Some(QueryExecutionResult::Select(_result)) => v_flex().on_action(cx.listener(Self::on_change_size))
                 .size_full()
                 .p_4()
-                .child(self.render_query_result(result, cx)),
+                .child(self.table.clone()),
             Some(QueryExecutionResult::Modified {
                 rows_affected,
                 execution_time_ms,

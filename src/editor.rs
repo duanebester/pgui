@@ -24,14 +24,16 @@ impl Editor {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let default_language = Language::Sql;
         let input_state = cx.new(|cx| {
-            InputState::new(window, cx)
+            let mut i = InputState::new(window, cx)
                 .code_editor(default_language.name())
                 .line_number(true)
                 .tab_size(TabSize {
                     tab_size: 2,
                     hard_tabs: false,
                 })
-                .placeholder("Enter your SQL query here...")
+                .placeholder("Enter your SQL query here...");
+            i.set_value("SELECT * FROM products;", window, cx);
+            i
         });
 
         let _subscribes = vec![cx.subscribe(&input_state, |_, _, _: &InputEvent, cx| {

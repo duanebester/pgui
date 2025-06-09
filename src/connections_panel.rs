@@ -27,9 +27,12 @@ pub struct ConnectionsPanel {
 impl ConnectionsPanel {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input_esc = cx.new(|cx| {
-            InputState::new(window, cx)
+            let mut i = InputState::new(window, cx)
                 .placeholder("Enter DB URL")
-                .clean_on_escape()
+                .clean_on_escape();
+
+            i.set_value("postgres://test:test@localhost:5432/test", window, cx);
+            i
         });
 
         Self {

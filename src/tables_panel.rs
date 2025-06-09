@@ -11,6 +11,13 @@ use gpui_component::{
 };
 use std::sync::Arc;
 
+pub enum TableEvent {
+    TableSelected(TableInfo),
+}
+
+impl EventEmitter<TableEvent> for TablesPanel {}
+
+
 #[derive(IntoElement)]
 struct TableListItem {
     base: ListItem,
@@ -218,12 +225,16 @@ impl TablesPanel {
         let table_list = cx.new(|cx| List::new(TableListDelegate::new(), window, cx));
 
         let _subscriptions = vec![
-            cx.subscribe(&table_list, |_, _, ev: &ListEvent, _| match ev {
+            cx.subscribe(&table_list, |this, _, ev: &ListEvent, cx| match ev {
                 ListEvent::Select(ix) => {
-                    println!("Table selected: {:?}", ix);
+                    if let Some(table) = this.get_selected_table(*ix, cx) {
+                        cx.emit(TableEvent::TableSelected(table));
+                    }
                 }
                 ListEvent::Confirm(ix) => {
-                    println!("Table confirmed: {:?}", ix);
+                    if let Some(table) = this.get_selected_table(*ix, cx) {
+                        cx.emit(TableEvent::TableSelected(table));
+                    }
                 }
                 ListEvent::Cancel => {
                     println!("Table selection cancelled");
@@ -241,6 +252,10 @@ impl TablesPanel {
 
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(window, cx))
+    }
+
+    fn get_selected_table(&self, ix: usize, cx: &App) -> Option<TableInfo> {
+        self.table_list.read(cx).delegate().matched_tables.get(ix).cloned()
     }
 
     pub fn handle_connection_event(&mut self, event: &ConnectionEvent, cx: &mut Context<Self>) {

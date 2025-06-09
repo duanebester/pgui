@@ -1,7 +1,8 @@
 use crate::connections_panel::{ConnectionEvent, ConnectionsPanel};
+use crate::database::TableInfo;
 use crate::editor::EditorEvent;
 use crate::header_bar::HeaderBar;
-use crate::tables_panel::TablesPanel;
+use crate::tables_panel::{TablesPanel, TableEvent};
 use crate::{editor::Editor, results_panel::ResultsPanel};
 
 use gpui::*;
@@ -41,6 +42,12 @@ impl Workspace {
                     });
                 },
             ),
+            cx.subscribe(
+                   &tables_panel,
+                   |this, _, event: &TableEvent, cx| {
+                       this.handle_table_event(event, cx);
+                   },
+               ),
         ];
 
         Self {
@@ -81,6 +88,44 @@ impl Workspace {
                     editor.set_executing(false, cx);
                 });
 
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    fn handle_table_event(&mut self, event: &TableEvent, cx: &mut Context<Self>) {
+        match event {
+            TableEvent::TableSelected(table) => {
+                self.show_table_columns(table.clone(), cx);
+            }
+        }
+    }
+
+    fn show_table_columns(&mut self, table: TableInfo, cx: &mut Context<Self>) {
+        // Get database manager from connections panel
+        let db_manager = self.connections_panel.read(cx).db_manager.clone();
+
+        cx.spawn(async move |this, cx| {
+            let result = db_manager.get_table_columns(&table.table_name, &table.table_schema).await;
+
+            this.update(cx, |this, cx| {
+                match result {
+                    Ok(query_result) => {
+                        this.results_panel.update(cx, |results, cx| {
+                            results.update_result(crate::database::QueryExecutionResult::Select(query_result), cx);
+                        });
+                    }
+                    Err(e) => {
+                        this.results_panel.update(cx, |results, cx| {
+                            results.update_result(
+                                crate::database::QueryExecutionResult::Error(format!("Failed to load table columns: {}", e)),
+                                cx
+                            );
+                        });
+                    }
+                }
                 cx.notify();
             })
             .ok();

@@ -19,6 +19,15 @@ pub struct QueryResult {
     pub execution_time_ms: u128,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ColumnInfo {
+    pub column_name: String,
+    pub data_type: String,
+    pub is_nullable: String,
+    pub column_default: Option<String>,
+    pub ordinal_position: i32,
+}
+
 #[derive(Debug, Clone)]
 pub enum QueryExecutionResult {
     Select(QueryResult),
@@ -94,6 +103,64 @@ impl DatabaseManager {
 
         Ok(tables)
     }
+
+    pub async fn get_table_columns(&self, table_name: &str, table_schema: &str) -> Result<QueryResult> {
+        let pool_guard = self.pool.read().await;
+        let pool = pool_guard
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Database not connected"))?;
+
+        let query = r#"
+            SELECT
+                column_name,
+                data_type,
+                is_nullable,
+                column_default,
+                ordinal_position
+            FROM information_schema.columns
+            WHERE table_name = $1 AND table_schema = $2
+            ORDER BY ordinal_position
+        "#;
+
+        let rows = sqlx::query(query)
+            .bind(table_name)
+            .bind(table_schema)
+            .fetch_all(pool)
+            .await?;
+
+        let columns: Vec<ColumnInfo> = rows
+            .into_iter()
+            .map(|row| ColumnInfo {
+                column_name: row.get("column_name"),
+                data_type: row.get("data_type"),
+                is_nullable: row.get("is_nullable"),
+                column_default: row.get("column_default"),
+                ordinal_position: row.get("ordinal_position"),
+            })
+            .collect();
+
+        // Convert columns to QueryResult format for display
+        let column_names = vec!["Column Name".to_string(), "Data Type".to_string(), "Nullable".to_string(), "Default".to_string()];
+        let column_rows: Vec<Vec<String>> = columns
+            .into_iter()
+            .map(|col| vec![
+                col.column_name,
+                col.data_type,
+                col.is_nullable,
+                col.column_default.unwrap_or_else(|| "NULL".to_string()),
+            ])
+            .collect();
+
+        let query_result = QueryResult {
+            columns: column_names,
+            rows: column_rows.clone(),
+            row_count: column_rows.clone().len(),
+            execution_time_ms: 0,
+        };
+
+        Ok(query_result)
+    }
+
 
     pub async fn execute_query(&self, sql: &str) -> QueryExecutionResult {
         let start_time = std::time::Instant::now();

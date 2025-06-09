@@ -84,12 +84,7 @@ impl Render for Editor {
             .border_color(cx.theme().border)
             .bg(cx.theme().background)
             .child(
-                h_flex().gap_2().items_center().child(execute_button).child(
-                    div()
-                        .text_xs()
-                        .text_color(cx.theme().muted_foreground)
-                        .child("Ctrl+Enter to execute"),
-                ),
+                h_flex().gap_2().items_center().child(execute_button),
             );
 
         v_flex().size_full().child(toolbar).child(

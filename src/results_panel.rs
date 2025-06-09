@@ -104,8 +104,6 @@ impl ResultsPanel {
             );
 
         v_flex()
-            .w_full()
-            .h_full()
             .border_1()
             .border_color(cx.theme().border)
             .rounded(cx.theme().radius)
@@ -119,7 +117,7 @@ impl ResultsPanel {
 impl Render for ResultsPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         match &self.current_result {
-            None => v_flex().size_full().items_center().justify_center().child(
+            None => h_flex().size_full().items_center().justify_center().child(
                 Label::new("Execute a query to see results here")
                     .text_sm()
                     .text_color(cx.theme().muted_foreground),
@@ -131,7 +129,7 @@ impl Render for ResultsPanel {
             Some(QueryExecutionResult::Modified {
                 rows_affected,
                 execution_time_ms,
-            }) => v_flex().size_full().items_center().justify_center().child(
+            }) => h_flex().size_full().items_center().justify_center().child(
                 Label::new(format!(
                     "Query executed successfully. {} rows affected in {}ms",
                     rows_affected, execution_time_ms

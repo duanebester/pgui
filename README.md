@@ -6,7 +6,7 @@ Written in [GPUI](https://gpui.rs) and [GPUI Component](https://github.com/longb
 
 As of 2025-06-07:
 
-![screengrab](./history/2025-06-07.png)
+![screengrab](./history/2025-06-09.png)
 
 ### Changelog
 

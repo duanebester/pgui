@@ -1,4 +1,5 @@
 use gpui::*;
+use gpui_component::TitleBar;
 
 pub fn get_window_options(cx: &mut App) -> WindowOptions {
     let mut window_size = size(px(1600.0), px(1200.0));
@@ -10,6 +11,7 @@ pub fn get_window_options(cx: &mut App) -> WindowOptions {
     let bounds = Bounds::centered(None, window_size, cx);
     WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
+        titlebar: Some(TitleBar::title_bar_options()),
         ..Default::default()
     }
 }

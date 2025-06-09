@@ -1,9 +1,10 @@
 mod assets;
+mod connections_panel;
 mod database;
-mod database_panel;
 mod editor;
 mod header_bar;
 mod results_panel;
+mod tables_panel;
 mod window;
 mod workspace;
 

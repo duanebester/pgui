@@ -1,7 +1,7 @@
 use gpui::*;
 use gpui_component::{
     ActiveTheme as _, Disableable as _, Icon, Sizable as _,
-    button::{Button, ButtonVariants as _},
+    button::{Button},
     h_flex,
     highlighter::Language,
     input::{InputEvent, InputState, TabSize, TextInput},
@@ -72,7 +72,7 @@ impl Render for Editor {
             })
             .icon(Icon::empty().path("icons/play.svg"))
             .small()
-            .primary()
+            .outline()
             .disabled(self.is_executing)
             .on_click(cx.listener(Self::execute_query));
 
@@ -83,9 +83,7 @@ impl Render for Editor {
             .border_b_1()
             .border_color(cx.theme().border)
             .bg(cx.theme().background)
-            .child(
-                h_flex().gap_2().items_center().child(execute_button),
-            );
+            .child(h_flex().gap_2().items_center().child(execute_button));
 
         v_flex().size_full().child(toolbar).child(
             div()

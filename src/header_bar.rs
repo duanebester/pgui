@@ -1,10 +1,15 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt, Theme, ThemeMode,
+    ActiveTheme as _, IconName, Sizable as _, Theme, ThemeMode,
     button::{Button, ButtonVariants as _},
     label::Label,
 };
+
+#[cfg(target_os = "macos")]
+const TITLE_BAR_LEFT_PADDING: Pixels = px(80.);
+#[cfg(not(target_os = "macos"))]
+const TITLE_BAR_LEFT_PADDING: Pixels = px(12.);
 
 pub struct HeaderBar {}
 
@@ -31,14 +36,6 @@ impl HeaderBar {
 
 impl Render for HeaderBar {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let logo = div()
-            .flex()
-            .flex_row()
-            .gap_2()
-            .items_center()
-            .child(Icon::empty().path("icons/database-zap.svg"))
-            .child(Label::new("PGUI").font_bold().text_sm());
-
         let theme_toggle = Button::new("theme-mode")
             .map(|this| {
                 if cx.theme().mode.is_dark() {
@@ -51,16 +48,32 @@ impl Render for HeaderBar {
             .ghost()
             .on_click(cx.listener(Self::change_color_mode));
 
+        let github_button = Button::new("github")
+            .icon(IconName::GitHub)
+            .small()
+            .ghost()
+            .on_click(|_, _, cx| cx.open_url("https://github.com/duanebester/pgui"));
+
         div()
-            .flex()
-            .justify_between()
-            .items_center()
-            .p_2()
+            .id("header-bar")
             .border_b_1()
             .border_color(cx.theme().border)
-            .bg(cx.theme().background)
-            .shadow_sm()
-            .child(logo)
-            .child(theme_toggle)
+            .pl(TITLE_BAR_LEFT_PADDING)
+            .child(
+                div()
+                    .flex()
+                    .justify_between()
+                    .items_center()
+                    .p_1()
+                    .child(Label::new("PGUI").text_xs())
+                    .child(
+                        div()
+                            .pr(px(5.0))
+                            .flex()
+                            .items_center()
+                            .child(theme_toggle)
+                            .child(github_button),
+                    ),
+            )
     }
 }

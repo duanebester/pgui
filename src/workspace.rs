@@ -1,18 +1,18 @@
-use crate::database_panel::DatabasePanel;
+use crate::connections_panel::{ConnectionEvent, ConnectionsPanel};
 use crate::editor::EditorEvent;
 use crate::header_bar::HeaderBar;
+use crate::tables_panel::TablesPanel;
 use crate::{editor::Editor, results_panel::ResultsPanel};
 
 use gpui::*;
-use gpui_component::{
-    ActiveTheme as _,
-    resizable::{ResizableState, resizable_panel, v_resizable},
-};
+use gpui_component::ActiveTheme;
+use gpui_component::resizable::{ResizableState, resizable_panel, v_resizable};
 
 pub struct Workspace {
     resize_state: Entity<ResizableState>,
     header_bar: Entity<HeaderBar>,
-    database_panel: Entity<DatabasePanel>,
+    connections_panel: Entity<ConnectionsPanel>,
+    tables_panel: Entity<TablesPanel>,
     editor: Entity<Editor>,
     results_panel: Entity<ResultsPanel>,
     _subscriptions: Vec<Subscription>,
@@ -22,23 +22,32 @@ impl Workspace {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let header_bar = HeaderBar::view(window, cx);
         let resize_state = ResizableState::new(cx);
-        let database_panel = DatabasePanel::view(window, cx);
+        let connections_panel = ConnectionsPanel::view(window, cx);
+        let tables_panel = TablesPanel::view(window, cx);
         let editor = Editor::view(window, cx);
         let results_panel = ResultsPanel::view(window, cx);
 
-        let _subscriptions =
-            vec![
-                cx.subscribe(&editor, |this, _, event: &EditorEvent, cx| match event {
-                    EditorEvent::ExecuteQuery(query) => {
-                        this.execute_query(query.clone(), cx);
-                    }
-                }),
-            ];
+        let _subscriptions = vec![
+            cx.subscribe(&editor, |this, _, event: &EditorEvent, cx| match event {
+                EditorEvent::ExecuteQuery(query) => {
+                    this.execute_query(query.clone(), cx);
+                }
+            }),
+            cx.subscribe(
+                &connections_panel,
+                |this, _, event: &ConnectionEvent, cx| {
+                    this.tables_panel.update(cx, |tables_panel, cx| {
+                        tables_panel.handle_connection_event(event, cx);
+                    });
+                },
+            ),
+        ];
 
         Self {
             resize_state,
             header_bar,
-            database_panel,
+            connections_panel,
+            tables_panel,
             editor,
             results_panel,
             _subscriptions,
@@ -55,8 +64,8 @@ impl Workspace {
             editor.set_executing(true, cx);
         });
 
-        // Get database manager from database panel
-        let db_manager = self.database_panel.read(cx).db_manager.clone();
+        // Get database manager from connections panel
+        let db_manager = self.connections_panel.read(cx).db_manager.clone();
 
         cx.spawn(async move |this, cx| {
             let result = db_manager.execute_query(&query).await;
@@ -82,34 +91,49 @@ impl Workspace {
 
 impl Render for Workspace {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let connections_sidebar = div()
+            .flex()
+            .h_full()
+            .border_color(cx.theme().border)
+            .border_r_1()
+            .w(px(300.0))
+            .child(self.connections_panel.clone());
+
+        let tables_sidebar = div()
+            .flex()
+            .w(px(300.0))
+            .h_full()
+            .border_color(cx.theme().border)
+            .border_l_1()
+            .child(self.tables_panel.clone());
+
+        let editor_area = div().flex().flex_1().h_full().child(self.editor.clone());
+
+        let content = div()
+            .flex()
+            .flex_1()
+            .h_full()
+            .child(editor_area)
+            .child(tables_sidebar);
+
+        let results = div().flex().flex_grow().child(self.results_panel.clone());
+
+        let main = div().flex().flex_col().flex_1().child(
+            v_resizable("resizable", self.resize_state.clone())
+                .child(
+                    resizable_panel()
+                        .size(px(400.))
+                        .size_range(px(200.)..px(800.))
+                        .child(content),
+                )
+                .child(resizable_panel().size(px(200.)).child(results)),
+        );
+
         div()
             .flex()
             .flex_col()
             .size_full()
             .child(self.header_bar.clone())
-            .child(
-                div()
-                    .flex()
-                    .flex_row()
-                    .flex_1()
-                    .child(
-                        div()
-                            .w(px(300.0))
-                            .h_full()
-                            .border_r_1()
-                            .border_color(cx.theme().border)
-                            .child(self.database_panel.clone()),
-                    )
-                    .child(
-                        v_resizable("resizable", self.resize_state.clone())
-                            .child(
-                                resizable_panel()
-                                    .size(px(500.))
-                                    .size_range(px(200.)..px(800.))
-                                    .child(self.editor.clone()),
-                            )
-                            .child(resizable_panel().child(self.results_panel.clone())),
-                    ),
-            )
+            .child(div().flex().flex_1().child(connections_sidebar).child(main))
     }
 }

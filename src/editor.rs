@@ -7,6 +7,7 @@ use gpui_component::{
     input::{InputEvent, InputState, TabSize, TextInput},
     v_flex,
 };
+use sqlformat::{format, FormatOptions, QueryParams};
 
 pub enum EditorEvent {
     ExecuteQuery(String),
@@ -16,8 +17,9 @@ impl EventEmitter<EditorEvent> for Editor {}
 
 pub struct Editor {
     input_state: Entity<InputState>,
-    is_executing: bool,
     _subscribes: Vec<Subscription>,
+    is_executing: bool,
+    is_formatting: bool,
 }
 
 impl Editor {
@@ -42,13 +44,28 @@ impl Editor {
 
         Self {
             input_state,
-            is_executing: false,
             _subscribes,
+            is_executing: false,
+            is_formatting: false,
         }
     }
 
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(window, cx))
+    }
+
+    pub fn format_query(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+        self.is_formatting = true;
+        cx.notify();
+
+        let sql = self.input_state.read(cx).value().clone();
+        let query = sql.trim();
+        let formatted = format(query, &QueryParams::None, &FormatOptions::default());
+        self.input_state.update(cx, |input_state, cx| {
+            input_state.set_value(formatted, window, cx);
+            self.is_formatting = false;
+            cx.notify();
+        })
     }
 
     pub fn execute_query(&mut self, _: &ClickEvent, _window: &mut Window, cx: &mut Context<Self>) {
@@ -78,6 +95,18 @@ impl Render for Editor {
             .disabled(self.is_executing)
             .on_click(cx.listener(Self::execute_query));
 
+        let format_button = Button::new("execute-format")
+            .label(if self.is_formatting {
+                "Formatting..."
+            } else {
+                "Format"
+            })
+            .icon(Icon::empty().path("icons/brush-cleaning.svg"))
+            .small()
+            .outline()
+            .disabled(self.is_formatting)
+            .on_click(cx.listener(Self::format_query));
+
         let toolbar = h_flex()
             .justify_between()
             .items_center()
@@ -85,7 +114,7 @@ impl Render for Editor {
             .border_b_1()
             .border_color(cx.theme().border)
             .bg(cx.theme().background)
-            .child(h_flex().gap_2().items_center().child(execute_button));
+            .child(h_flex().gap_2().items_center().child(format_button).child(execute_button));
 
         v_flex().size_full().child(toolbar).child(
             div()

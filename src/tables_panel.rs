@@ -46,7 +46,7 @@ impl RenderOnce for TableListItem {
         };
 
         let bg_color = if self.selected {
-            cx.theme().list_active
+            cx.theme().list_active.opacity(0.2)
         } else if self.ix % 2 == 0 {
             cx.theme().list
         } else {

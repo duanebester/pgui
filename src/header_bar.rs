@@ -1,10 +1,12 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
-    ActiveTheme as _, IconName, Sizable as _, Theme, ThemeMode,
+    ActiveTheme as _, IconName, Sizable as _,
     button::{Button, ButtonVariants as _},
     label::Label,
 };
+
+use crate::apply_catppuccin_theme;
 
 #[cfg(target_os = "macos")]
 const TITLE_BAR_LEFT_PADDING: Pixels = px(80.);
@@ -23,14 +25,13 @@ impl HeaderBar {
     pub fn change_color_mode(
         &mut self,
         _: &ClickEvent,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let mode = match cx.theme().mode.is_dark() {
-            true => ThemeMode::Light,
-            false => ThemeMode::Dark,
+        match cx.theme().mode.is_dark() {
+            true => apply_catppuccin_theme("latte", window, cx),
+            false => apply_catppuccin_theme("macchiato", window, cx),
         };
-        Theme::change(mode, None, cx);
     }
 }
 
@@ -57,6 +58,7 @@ impl Render for HeaderBar {
         div()
             .id("header-bar")
             .border_b_1()
+            .bg(cx.theme().title_bar)
             .border_color(cx.theme().border)
             .pl(TITLE_BAR_LEFT_PADDING)
             .child(

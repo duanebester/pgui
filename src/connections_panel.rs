@@ -163,7 +163,7 @@ impl Render for ConnectionsPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .size_full()
-            .bg(cx.theme().background)
+            .bg(cx.theme().sidebar)
             .child(self.render_connection_section(cx))
             .child(self.render_connections_list(cx))
     }

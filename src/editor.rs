@@ -1,11 +1,6 @@
 use gpui::*;
 use gpui_component::{
-    ActiveTheme as _, Disableable as _, Icon, Sizable as _,
-    button::{Button},
-    h_flex,
-    highlighter::Language,
-    input::{InputEvent, InputState, TabSize, TextInput},
-    v_flex,
+    button::{Button}, h_flex, highlighter::Language, input::{InputEvent, InputState, TabSize, TextInput}, v_flex, ActiveTheme as _, Disableable as _, Icon, Sizable as _
 };
 use sqlformat::{format, FormatOptions, QueryParams};
 

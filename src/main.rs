@@ -49,7 +49,7 @@ fn main() {
             theme::init(cx);
 
             match cx.theme().mode.is_dark() {
-                true => apply_catppuccin_theme("latte", win, cx),
+                true => apply_catppuccin_theme("macchiato", win, cx),
                 false => apply_catppuccin_theme("latte", win, cx),
             };
 

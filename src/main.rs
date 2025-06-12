@@ -2,10 +2,10 @@ mod assets;
 mod connections_panel;
 mod database;
 mod editor;
-mod themes;
 mod header_bar;
 mod results_panel;
 mod tables_panel;
+mod themes;
 mod window;
 mod workspace;
 
@@ -14,7 +14,11 @@ use themes::*;
 use window::*;
 
 use gpui::*;
-use gpui_component::{highlighter::{self, LanguageRegistry}, theme, ActiveTheme as _, Theme, ThemeMode};
+use gpui_component::{
+    ActiveTheme as _, Theme, ThemeMode,
+    highlighter::{self, LanguageRegistry},
+    theme,
+};
 use workspace::Workspace;
 
 /// Apply a Catppuccin theme by name

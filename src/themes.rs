@@ -15,7 +15,6 @@ pub const DEFAULT_LIGHT: LazyLock<HighlightTheme> = LazyLock::new(|| {
     serde_json::from_str(json).unwrap()
 });
 
-
 /// Catppuccin Latte (Light) theme colors
 pub fn catppuccin_latte() -> ThemeColor {
     ThemeColor {

@@ -17,7 +17,6 @@ pub enum TableEvent {
 
 impl EventEmitter<TableEvent> for TablesPanel {}
 
-
 #[derive(IntoElement)]
 struct TableListItem {
     base: ListItem,
@@ -224,23 +223,24 @@ impl TablesPanel {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let table_list = cx.new(|cx| List::new(TableListDelegate::new(), window, cx));
 
-        let _subscriptions = vec![
-            cx.subscribe(&table_list, |this, _, ev: &ListEvent, cx| match ev {
-                ListEvent::Select(ix) => {
-                    if let Some(table) = this.get_selected_table(*ix, cx) {
-                        cx.emit(TableEvent::TableSelected(table));
+        let _subscriptions =
+            vec![
+                cx.subscribe(&table_list, |this, _, ev: &ListEvent, cx| match ev {
+                    ListEvent::Select(ix) => {
+                        if let Some(table) = this.get_selected_table(*ix, cx) {
+                            cx.emit(TableEvent::TableSelected(table));
+                        }
                     }
-                }
-                ListEvent::Confirm(ix) => {
-                    if let Some(table) = this.get_selected_table(*ix, cx) {
-                        cx.emit(TableEvent::TableSelected(table));
+                    ListEvent::Confirm(ix) => {
+                        if let Some(table) = this.get_selected_table(*ix, cx) {
+                            cx.emit(TableEvent::TableSelected(table));
+                        }
                     }
-                }
-                ListEvent::Cancel => {
-                    println!("Table selection cancelled");
-                }
-            }),
-        ];
+                    ListEvent::Cancel => {
+                        println!("Table selection cancelled");
+                    }
+                }),
+            ];
 
         Self {
             table_list,
@@ -255,7 +255,12 @@ impl TablesPanel {
     }
 
     fn get_selected_table(&self, ix: usize, cx: &App) -> Option<TableInfo> {
-        self.table_list.read(cx).delegate().matched_tables.get(ix).cloned()
+        self.table_list
+            .read(cx)
+            .delegate()
+            .matched_tables
+            .get(ix)
+            .cloned()
     }
 
     pub fn handle_connection_event(&mut self, event: &ConnectionEvent, cx: &mut Context<Self>) {
@@ -357,12 +362,12 @@ impl Render for TablesPanel {
             .size_full()
             .gap_2()
             .p_3()
-            .bg(cx.theme().background)
+            .bg(cx.theme().sidebar)
             .child(header)
             .child(
                 Label::new(status_text)
                     .text_xs()
-                    .text_color(cx.theme().muted_foreground),
+                    .text_color(cx.theme().foreground),
             )
             .child(
                 div()

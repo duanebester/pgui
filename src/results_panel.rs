@@ -3,8 +3,10 @@ use std::{ops::Range, time::Duration};
 use crate::database::{QueryExecutionResult, QueryResult};
 use gpui::*;
 use gpui_component::{
-    ActiveTheme as _, h_flex, label::Label, v_flex, Size, StyleSized,
+    ActiveTheme as _, Size, StyleSized, h_flex,
+    label::Label,
     table::{self, ColFixed, Table, TableDelegate},
+    v_flex,
 };
 use serde::Deserialize;
 
@@ -263,9 +265,12 @@ impl ResultsPanel {
     pub fn clear_results(&mut self, cx: &mut Context<Self>) {
         self.current_result = None;
         self.table.update(cx, |table, cx| {
-            table.delegate_mut().update(
-                QueryResult { columns: vec![], rows: vec![], row_count: 0, execution_time_ms: 0 }
-            );
+            table.delegate_mut().update(QueryResult {
+                columns: vec![],
+                rows: vec![],
+                row_count: 0,
+                execution_time_ms: 0,
+            });
             table.refresh(cx);
         });
         cx.notify();
@@ -280,7 +285,8 @@ impl Render for ResultsPanel {
                     .text_sm()
                     .text_color(cx.theme().muted_foreground),
             ),
-            Some(QueryExecutionResult::Select(_result)) => v_flex().on_action(cx.listener(Self::on_change_size))
+            Some(QueryExecutionResult::Select(_result)) => v_flex()
+                .on_action(cx.listener(Self::on_change_size))
                 .size_full()
                 .p_4()
                 .child(self.table.clone()),

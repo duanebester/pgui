@@ -104,7 +104,11 @@ impl DatabaseManager {
         Ok(tables)
     }
 
-    pub async fn get_table_columns(&self, table_name: &str, table_schema: &str) -> Result<QueryResult> {
+    pub async fn get_table_columns(
+        &self,
+        table_name: &str,
+        table_schema: &str,
+    ) -> Result<QueryResult> {
         let pool_guard = self.pool.read().await;
         let pool = pool_guard
             .as_ref()
@@ -140,15 +144,22 @@ impl DatabaseManager {
             .collect();
 
         // Convert columns to QueryResult format for display
-        let column_names = vec!["Column Name".to_string(), "Data Type".to_string(), "Nullable".to_string(), "Default".to_string()];
+        let column_names = vec![
+            "Column Name".to_string(),
+            "Data Type".to_string(),
+            "Nullable".to_string(),
+            "Default".to_string(),
+        ];
         let column_rows: Vec<Vec<String>> = columns
             .into_iter()
-            .map(|col| vec![
-                col.column_name,
-                col.data_type,
-                col.is_nullable,
-                col.column_default.unwrap_or_else(|| "NULL".to_string()),
-            ])
+            .map(|col| {
+                vec![
+                    col.column_name,
+                    col.data_type,
+                    col.is_nullable,
+                    col.column_default.unwrap_or_else(|| "NULL".to_string()),
+                ]
+            })
             .collect();
 
         let query_result = QueryResult {
@@ -160,7 +171,6 @@ impl DatabaseManager {
 
         Ok(query_result)
     }
-
 
     pub async fn execute_query(&self, sql: &str) -> QueryExecutionResult {
         let start_time = std::time::Instant::now();

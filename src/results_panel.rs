@@ -40,12 +40,12 @@ impl ResultsTableDelegate {
             size: Size::default(),
             rows: vec![],
             columns: vec![],
-            col_resize: false,
+            col_resize: true,
             col_order: false,
             col_selection: false,
-            fixed_cols: true,
+            fixed_cols: false,
             loading: false,
-            visible_cols: Range::default(),
+            visible_cols: 0..3,
             visible_rows: Range::default(),
         }
     }
@@ -253,12 +253,16 @@ impl ResultsPanel {
         cx.notify();
     }
 
+    #[allow(unused)]
     fn on_change_size(&mut self, a: &ChangeSize, _: &mut Window, cx: &mut Context<Self>) {
+        println!("Size: {:?}", a.0);
         self.size = a.0;
         self.table.update(cx, |table, cx| {
             table.set_size(a.0, cx);
             table.delegate_mut().size = a.0;
+            cx.notify();
         });
+        cx.notify();
     }
 
     #[allow(dead_code)]
@@ -280,16 +284,9 @@ impl ResultsPanel {
 impl Render for ResultsPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         match &self.current_result {
-            None => h_flex().size_full().items_center().justify_center().child(
-                Label::new("Execute a query to see results here")
-                    .text_sm()
-                    .text_color(cx.theme().muted_foreground),
-            ),
-            Some(QueryExecutionResult::Select(_result)) => v_flex()
-                .on_action(cx.listener(Self::on_change_size))
-                .size_full()
-                .p_4()
-                .child(self.table.clone()),
+            Some(QueryExecutionResult::Select(_result)) => {
+                v_flex().size_full().p_4().child(self.table.clone())
+            }
             Some(QueryExecutionResult::Modified {
                 rows_affected,
                 execution_time_ms,
@@ -313,6 +310,11 @@ impl Render for ResultsPanel {
                             .text_sm()
                             .text_color(cx.theme().danger_foreground),
                     ),
+            ),
+            _ => h_flex().size_full().items_center().justify_center().child(
+                Label::new("Execute a query to see results here")
+                    .text_sm()
+                    .text_color(cx.theme().muted_foreground),
             ),
         }
     }

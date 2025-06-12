@@ -1,31 +1,34 @@
 use crate::connections_panel::{ConnectionEvent, ConnectionsPanel};
 use crate::database::TableInfo;
 use crate::editor::EditorEvent;
+use crate::footer_bar::{FooterBar, FooterBarEvent};
 use crate::header_bar::HeaderBar;
 use crate::tables_panel::{TableEvent, TablesPanel};
 use crate::{editor::Editor, results_panel::ResultsPanel};
 
 use gpui::prelude::FluentBuilder;
 use gpui::*;
-use gpui_component::button::{Button, ButtonGroup, ButtonVariants};
+
+use gpui_component::ActiveTheme;
 use gpui_component::resizable::{ResizableState, resizable_panel, v_resizable};
-use gpui_component::{ActiveTheme, Icon, Selectable, Sizable};
 
 pub struct Workspace {
     resize_state: Entity<ResizableState>,
     header_bar: Entity<HeaderBar>,
+    footer_bar: Entity<FooterBar>,
     connections_panel: Entity<ConnectionsPanel>,
     tables_panel: Entity<TablesPanel>,
     editor: Entity<Editor>,
     results_panel: Entity<ResultsPanel>,
     _subscriptions: Vec<Subscription>,
-    connections_active: bool,
-    tables_active: bool,
+    show_connections: bool,
+    show_tables: bool,
 }
 
 impl Workspace {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let header_bar = HeaderBar::view(window, cx);
+        let footer_bar = FooterBar::view(window, cx);
         let resize_state = ResizableState::new(cx);
         let connections_panel = ConnectionsPanel::view(window, cx);
         let tables_panel = TablesPanel::view(window, cx);
@@ -49,18 +52,32 @@ impl Workspace {
             cx.subscribe(&tables_panel, |this, _, event: &TableEvent, cx| {
                 this.handle_table_event(event, cx);
             }),
+            cx.subscribe(&footer_bar, |this, _, event: &FooterBarEvent, cx| {
+                match event {
+                    FooterBarEvent::ShowConnections => {
+                        this.show_connections = true;
+                        this.show_tables = false;
+                    }
+                    FooterBarEvent::ShowTables => {
+                        this.show_connections = false;
+                        this.show_tables = true;
+                    }
+                }
+                cx.notify();
+            }),
         ];
 
         Self {
             resize_state,
             header_bar,
+            footer_bar,
             connections_panel,
             tables_panel,
             editor,
             results_panel,
             _subscriptions,
-            connections_active: true,
-            tables_active: false,
+            show_connections: true,
+            show_tables: false,
         }
     }
 
@@ -147,89 +164,40 @@ impl Workspace {
 
 impl Render for Workspace {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // let view = cx.entity().clone();
-        let connections_button = Button::new("connections_panel")
-            .icon(Icon::empty().path("icons/cable.svg"))
-            .small()
-            .selected(self.connections_active.clone())
-            .ghost()
-            .tooltip("Show Connections");
-
-        let tables_button = Button::new("tables_panel")
-            .icon(Icon::empty().path("icons/table-properties.svg"))
-            .small()
-            .selected(self.tables_active.clone())
-            .ghost()
-            .tooltip("Show Database Tables");
-
-        let controls = ButtonGroup::new("controls-toggle-group")
-            .ghost()
-            .compact()
-            .child(connections_button)
-            .child(tables_button)
-            .on_click(cx.listener(|view, selected: &Vec<usize>, _, cx| {
-                view.connections_active = selected.contains(&0);
-                view.tables_active = selected.contains(&1);
-                cx.notify();
-            }));
-
-        let connections_sidebar = div()
+        let sidebar = div()
             .flex()
             .h_full()
             .border_color(cx.theme().border)
             .border_r_1()
-            .w(px(300.0))
-            .child(self.connections_panel.clone());
+            .min_w(px(300.0))
+            .when(self.show_connections, |this| {
+                this.child(self.connections_panel.clone())
+            })
+            .when(self.show_tables, |this| {
+                this.child(self.tables_panel.clone())
+            });
 
-        let tables_sidebar = div()
-            .flex()
-            .w(px(300.0))
-            .h_full()
-            .border_color(cx.theme().border)
-            .border_r_1()
-            .child(self.tables_panel.clone());
-
-        let editor_panel = div().flex().flex_1().h_full().child(self.editor.clone());
-        let results_panel = div().flex().flex_grow().child(self.results_panel.clone());
-
-        let main = div().flex().flex_col().flex_1().child(
+        let main = div().flex().flex_col().w_full().overflow_hidden().child(
             v_resizable("resizable", self.resize_state.clone())
                 .child(
                     resizable_panel()
                         .size(px(400.))
                         .size_range(px(200.)..px(800.))
-                        .child(editor_panel),
+                        .child(self.editor.clone()),
                 )
-                .child(resizable_panel().size(px(200.)).child(results_panel)),
+                .child(
+                    resizable_panel()
+                        .size(px(200.))
+                        .child(self.results_panel.clone()),
+                ),
         );
-
-        let footer = div()
-            .border_t_1()
-            .text_xs()
-            .bg(cx.theme().title_bar)
-            .border_color(cx.theme().border)
-            .flex()
-            .flex_row()
-            .justify_start()
-            .items_center()
-            .p_2()
-            .child(controls);
 
         div()
             .flex()
             .flex_col()
             .size_full()
             .child(self.header_bar.clone())
-            .child(
-                div()
-                    .flex()
-                    .flex_1()
-                    .when(self.connections_active, |this| {
-                        this.child(connections_sidebar)
-                    })
-                    .when(self.tables_active, |this| this.child(tables_sidebar))
-                    .child(main),
-            )
-            .child(footer)
+            .child(div().flex().flex_grow().child(sidebar).child(main))
+            .child(self.footer_bar.clone())
     }
 }

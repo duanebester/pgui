@@ -2,6 +2,7 @@ mod assets;
 mod connections_panel;
 mod database;
 mod editor;
+mod footer_bar;
 mod header_bar;
 mod results_panel;
 mod tables_panel;

@@ -1,12 +1,5 @@
 mod assets;
-mod connections_panel;
-mod database;
-mod editor;
-mod footer_bar;
-mod header_bar;
-mod results_panel;
-mod sql_analyzer;
-mod tables_panel;
+mod services;
 mod themes;
 mod window;
 mod workspace;

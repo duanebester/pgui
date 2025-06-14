@@ -1,11 +1,11 @@
-use crate::connections_panel::{ConnectionEvent, ConnectionsPanel};
-use crate::database::TableInfo;
-use crate::editor::EditorEvent;
-use crate::footer_bar::{FooterBar, FooterBarEvent};
-use crate::header_bar::HeaderBar;
-use crate::tables_panel::{TableEvent, TablesPanel};
-use crate::{editor::Editor, results_panel::ResultsPanel};
+use super::connections_panel::{ConnectionEvent, ConnectionsPanel};
+use super::editor::EditorEvent;
+use super::footer_bar::{FooterBar, FooterBarEvent};
+use super::header_bar::HeaderBar;
+use super::tables_panel::{TableEvent, TablesPanel};
+use super::{editor::Editor, results_panel::ResultsPanel};
 
+use crate::services::{QueryExecutionResult, TableInfo};
 use gpui::prelude::FluentBuilder;
 use gpui::*;
 
@@ -136,16 +136,13 @@ impl Workspace {
                 match result {
                     Ok(query_result) => {
                         this.results_panel.update(cx, |results, cx| {
-                            results.update_result(
-                                crate::database::QueryExecutionResult::Select(query_result),
-                                cx,
-                            );
+                            results.update_result(QueryExecutionResult::Select(query_result), cx);
                         });
                     }
                     Err(e) => {
                         this.results_panel.update(cx, |results, cx| {
                             results.update_result(
-                                crate::database::QueryExecutionResult::Error(format!(
+                                QueryExecutionResult::Error(format!(
                                     "Failed to load table columns: {}",
                                     e
                                 )),

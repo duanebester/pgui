@@ -7,11 +7,11 @@ use gpui_component::highlighter::HighlightTheme;
 
 /// Code editor theming
 pub const DEFAULT_DARK: LazyLock<HighlightTheme> = LazyLock::new(|| {
-    let json = include_str!("highlighter/themes/macchiato.json");
+    let json = include_str!("highlighter/macchiato.json");
     serde_json::from_str(json).unwrap()
 });
 pub const DEFAULT_LIGHT: LazyLock<HighlightTheme> = LazyLock::new(|| {
-    let json = include_str!("highlighter/themes/latte.json");
+    let json = include_str!("highlighter/latte.json");
     serde_json::from_str(json).unwrap()
 });
 

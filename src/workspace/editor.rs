@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::sql_analyzer::SqlQueryAnalyzer;
+use crate::services::SqlQueryAnalyzer;
 use gpui::*;
 use gpui_component::{
     ActiveTheme as _, Disableable as _, Icon, Sizable as _,

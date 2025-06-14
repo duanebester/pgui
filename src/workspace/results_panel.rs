@@ -1,6 +1,6 @@
 use std::{ops::Range, time::Duration};
 
-use crate::database::{QueryExecutionResult, QueryResult};
+use crate::services::{QueryExecutionResult, QueryResult};
 use gpui::*;
 use gpui_component::{
     ActiveTheme as _, Size, StyleSized, h_flex,

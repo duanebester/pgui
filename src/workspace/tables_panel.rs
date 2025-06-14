@@ -1,5 +1,5 @@
-use crate::connections_panel::ConnectionEvent;
-use crate::database::{DatabaseManager, TableInfo};
+use super::connections_panel::ConnectionEvent;
+use crate::services::{DatabaseManager, TableInfo};
 use gpui::*;
 use gpui_component::{
     ActiveTheme as _, Disableable, Icon, IconName, Sizable as _, StyledExt,

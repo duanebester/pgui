@@ -1,4 +1,4 @@
-use crate::database::DatabaseManager;
+use crate::services::DatabaseManager;
 use gpui::*;
 use gpui_component::{
     ActiveTheme as _, Disableable, Icon, Sizable as _, StyledExt,

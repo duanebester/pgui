@@ -1,3 +1,6 @@
+use std::time::Duration;
+
+use crate::sql_analyzer::SqlQueryAnalyzer;
 use gpui::*;
 use gpui_component::{
     ActiveTheme as _, Disableable as _, Icon, Sizable as _,
@@ -18,8 +21,11 @@ impl EventEmitter<EditorEvent> for Editor {}
 pub struct Editor {
     input_state: Entity<InputState>,
     _subscribes: Vec<Subscription>,
+    sql_analyzer: SqlQueryAnalyzer,
     is_executing: bool,
     is_formatting: bool,
+    debounce_task: Option<Task<()>>,
+    debounce_duration: Duration,
 }
 
 impl Editor {
@@ -38,15 +44,40 @@ impl Editor {
             i
         });
 
-        let _subscribes = vec![cx.subscribe(&input_state, |_, _, _: &InputEvent, cx| {
-            cx.notify();
-        })];
+        let sql_analyzer = SqlQueryAnalyzer::new();
+
+        let _subscribes = vec![
+            cx.subscribe(&input_state, |_, _, _: &InputEvent, cx| {
+                cx.notify();
+            }),
+            cx.subscribe_in(
+                &input_state,
+                window,
+                |this, input_state, _: &InputEvent, window, cx| {
+                    let input_state = input_state.clone();
+                    let duration = this.debounce_duration;
+                    // Dropping the old task automatically cancels it
+                    this.debounce_task = Some(cx.spawn_in(window, async move |editor, cx| {
+                        Timer::after(duration).await;
+
+                        _ = editor.update_in(cx, move |this, _, cx| {
+                            let text = input_state.read(cx).value().clone();
+                            let queries = this.sql_analyzer.detect_queries(&text);
+                            println!("Queries: {:?}", queries);
+                        });
+                    }));
+                },
+            ),
+        ];
 
         Self {
             input_state,
-            _subscribes,
+            sql_analyzer,
             is_executing: false,
             is_formatting: false,
+            debounce_task: None,
+            debounce_duration: Duration::from_millis(250),
+            _subscribes,
         }
     }
 

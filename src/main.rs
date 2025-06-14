@@ -5,6 +5,7 @@ mod editor;
 mod footer_bar;
 mod header_bar;
 mod results_panel;
+mod sql_analyzer;
 mod tables_panel;
 mod themes;
 mod window;

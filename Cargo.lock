@@ -4179,6 +4179,8 @@ dependencies = [
  "serde_json",
  "sqlformat",
  "sqlx",
+ "tree-sitter",
+ "tree-sitter-sequel",
 ]
 
 [[package]]

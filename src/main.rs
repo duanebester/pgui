@@ -1,5 +1,6 @@
 mod assets;
 mod services;
+mod state;
 mod themes;
 mod window;
 mod workspace;
@@ -10,9 +11,7 @@ use window::*;
 
 use gpui::*;
 use gpui_component::{
-    ActiveTheme as _, Theme, ThemeMode,
-    highlighter::{self, LanguageRegistry},
-    theme,
+    highlighter::{self, LanguageRegistry}, theme, ActiveTheme as _, Root, Theme, ThemeMode
 };
 use workspace::Workspace;
 
@@ -46,6 +45,7 @@ fn main() {
             gpui_component::init(cx);
             highlighter::init(cx);
             theme::init(cx);
+            state::init(cx);
 
             match cx.theme().mode.is_dark() {
                 true => apply_catppuccin_theme("macchiato", win, cx),
@@ -53,7 +53,10 @@ fn main() {
             };
 
             let workspace_view = Workspace::view(win, cx);
-            cx.new(|cx| gpui_component::Root::new(workspace_view.into(), win, cx))
+            let drawer_layer = Root::render_drawer_layer(win, cx);
+            let modal_layer = Root::render_modal_layer(win, cx);
+
+            cx.new(|cx| Root::new(workspace_view.into(), win, cx))
         })
         .unwrap();
     });

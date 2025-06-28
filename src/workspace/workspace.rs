@@ -9,7 +9,7 @@ use crate::services::{QueryExecutionResult, TableInfo};
 use gpui::prelude::FluentBuilder;
 use gpui::*;
 
-use gpui_component::ActiveTheme;
+use gpui_component::{ActiveTheme, Root};
 use gpui_component::resizable::{ResizableState, resizable_panel, v_resizable};
 
 pub struct Workspace {
@@ -160,7 +160,7 @@ impl Workspace {
 }
 
 impl Render for Workspace {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let sidebar = div()
             .flex()
             .h_full()
@@ -189,6 +189,9 @@ impl Render for Workspace {
                 ),
         );
 
+        let drawer_layer = Root::render_drawer_layer(window, cx);
+        let modal_layer = Root::render_modal_layer(window, cx);
+
         div()
             .flex()
             .flex_col()
@@ -196,5 +199,7 @@ impl Render for Workspace {
             .child(self.header_bar.clone())
             .child(div().flex().flex_grow().child(sidebar).child(main))
             .child(self.footer_bar.clone())
+            .children(drawer_layer)
+            .children(modal_layer)
     }
 }

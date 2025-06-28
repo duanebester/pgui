@@ -10,16 +10,16 @@ use gpui_component::{
 };
 use serde::Deserialize;
 
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = results_panel, no_json)]
 struct ChangeSize(Size);
+
 
 pub struct ResultsPanel {
     current_result: Option<QueryExecutionResult>,
     table: Entity<Table<ResultsTableDelegate>>,
     size: Size,
 }
-
-impl_internal_actions!(results_panel, [ChangeSize]);
 
 struct ResultsTableDelegate {
     columns: Vec<String>,

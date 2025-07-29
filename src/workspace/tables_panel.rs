@@ -2,7 +2,7 @@ use super::connections_panel::ConnectionEvent;
 use crate::services::{DatabaseManager, TableInfo};
 use gpui::*;
 use gpui_component::{
-    ActiveTheme as _, Disableable, Icon, IconName, Sizable as _, StyledExt,
+    ActiveTheme as _, Disableable, Icon, IconName, Selectable, Sizable as _, StyledExt,
     button::{Button, ButtonVariants as _},
     h_flex,
     label::Label,
@@ -33,6 +33,17 @@ impl TableListItem {
             base: ListItem::new(id),
             selected,
         }
+    }
+}
+
+impl Selectable for TableListItem {
+    fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
+    }
+
+    fn is_selected(&self) -> bool {
+        self.selected
     }
 }
 

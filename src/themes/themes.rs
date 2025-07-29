@@ -1,216 +1,40 @@
+use std::collections::HashMap;
 use std::sync::LazyLock;
 
 use gpui::*;
-use gpui_component::Colorize;
-use gpui_component::ThemeColor;
-use gpui_component::highlighter::HighlightTheme;
+use gpui_component::Theme;
+use gpui_component::ThemeConfig;
+use gpui_component::ThemeMode;
+use gpui_component::ThemeSet;
 
-/// Code editor theming
-pub const DEFAULT_DARK: LazyLock<HighlightTheme> = LazyLock::new(|| {
-    let json = include_str!("highlighter/macchiato.json");
-    serde_json::from_str(json).unwrap()
-});
-pub const DEFAULT_LIGHT: LazyLock<HighlightTheme> = LazyLock::new(|| {
-    let json = include_str!("highlighter/latte.json");
-    serde_json::from_str(json).unwrap()
-});
-
-/// Catppuccin Latte (Light) theme colors
-pub fn catppuccin_latte() -> ThemeColor {
-    ThemeColor {
-        accent: rgb(0x8839ef).into(),
-        accent_foreground: rgb(0xeff1f5).into(),
-        accordion: rgb(0xdce0e8).into(),
-        accordion_active: rgb(0xccd0da).into(),
-        accordion_hover: Hsla::from(rgb(0xbcc0cc)).opacity(0.7),
-        background: rgb(0xeff1f5).into(),
-        border: rgb(0xccd0da).into(),
-        card: rgb(0xe6e9ef).into(),
-        card_foreground: rgb(0x4c4f69).into(),
-        caret: rgb(0xdc8a78).into(),
-        chart_1: rgb(0x1e66f5).into(),
-        chart_2: rgb(0x40a02b).into(),
-        chart_3: rgb(0xdf8e1d).into(),
-        chart_4: rgb(0xd20f39).into(),
-        chart_5: rgb(0x8839ef).into(),
-        danger: rgb(0xd20f39).into(),
-        danger_active: rgb(0xd20f39).into(),
-        danger_foreground: rgb(0xeff1f5).into(),
-        danger_hover: Hsla::from(rgb(0xd20f39)).opacity(0.9),
-        description_list_label: rgb(0x6c6f85).into(),
-        description_list_label_foreground: rgb(0x4c4f69).into(),
-        drag_border: rgb(0x8839ef).into(),
-        drop_target: Hsla::from(rgb(0xccd0da)).opacity(0.25),
-        foreground: rgb(0x4c4f69).into(),
-        info: rgb(0x179299).into(),
-        info_active: rgb(0x179299).into(),
-        info_foreground: rgb(0xeff1f5).into(),
-        info_hover: Hsla::from(rgb(0x179299)).opacity(0.9),
-        input: rgb(0xdce0e8).into(),
-        link: rgb(0x1e66f5).into(),
-        link_active: Hsla::from(rgb(0x04a5e5)).darken(0.2),
-        link_hover: Hsla::from(rgb(0x04a5e5)).lighten(0.2),
-        list: rgb(0xeff1f5).into(),
-        list_active: Hsla::from(rgb(0xccd0da)).opacity(0.2),
-        list_active_border: rgb(0x8839ef).into(),
-        list_even: rgb(0xe6e9ef).into(),
-        list_head: rgb(0xdce0e8).into(),
-        list_hover: rgb(0xbcc0cc).into(),
-        muted: rgb(0xe6e9ef).into(),
-        muted_foreground: rgb(0x6c6f85).into(),
-        overlay: Hsla::from(rgb(0x9ca0b0)).opacity(0.06),
-        popover: rgb(0xeff1f5).into(),
-        popover_foreground: rgb(0x4c4f69).into(),
-        primary: rgb(0x8839ef).into(),
-        primary_active: rgb(0x8839ef).into(),
-        primary_foreground: rgb(0xeff1f5).into(),
-        primary_hover: rgb(0x8839ef).into(),
-        progress_bar: rgb(0x8839ef).into(),
-        ring: rgb(0x8839ef).into(),
-        scrollbar: Hsla::from(rgb(0xbcc0cc)).opacity(0.95),
-        scrollbar_thumb: Hsla::from(rgb(0x8839ef)).opacity(0.9),
-        scrollbar_thumb_hover: rgb(0x9ca0b0).into(),
-        secondary: rgb(0xdce0e8).into(),
-        secondary_active: rgb(0xbcc0cc).into(),
-        secondary_foreground: rgb(0x4c4f69).into(),
-        secondary_hover: rgb(0xccd0da).into(),
-        selection: rgb(0xacb0be).into(),
-        sidebar: rgb(0xe6e9ef).into(),
-        sidebar_accent: rgb(0x8839ef).into(),
-        sidebar_accent_foreground: rgb(0xeff1f5).into(),
-        sidebar_border: rgb(0xccd0da).into(),
-        sidebar_foreground: rgb(0x4c4f69).into(),
-        sidebar_primary: rgb(0x8839ef).into(),
-        sidebar_primary_foreground: rgb(0xeff1f5).into(),
-        skeleton: Hsla::from(rgb(0xbcc0cc)).opacity(0.1),
-        slider_bar: rgb(0xdce0e8).into(),
-        slider_thumb: rgb(0x8839ef).into(),
-        success: rgb(0x40a02b).into(),
-        success_foreground: rgb(0xeff1f5).into(),
-        success_hover: Hsla::from(rgb(0x40a02b)).opacity(0.9),
-        success_active: rgb(0x40a02b).into(),
-        switch: rgb(0x8839ef).into(),
-        tab: rgb(0xe6e9ef).into(),
-        tab_active: rgb(0xeff1f5).into(),
-        tab_active_foreground: rgb(0x4c4f69).into(),
-        tab_bar: rgb(0xdce0e8).into(),
-        tab_bar_segmented: rgb(0xdce0e8).into(),
-        tab_foreground: rgb(0x6c6f85).into(),
-        table: rgb(0xeff1f5).into(),
-        table_active: Hsla::from(rgb(0xccd0da)).opacity(0.2),
-        table_active_border: rgb(0x8839ef).into(),
-        table_even: rgb(0xe6e9ef).into(),
-        table_head: rgb(0xdce0e8).into(),
-        table_head_foreground: rgb(0x4c4f69).into(),
-        table_hover: rgb(0xbcc0cc).into(),
-        table_row_border: rgb(0xccd0da).into(),
-        title_bar: rgb(0xdce0e8).into(),
-        title_bar_border: rgb(0xccd0da).into(),
-        tiles: rgb(0xe6e9ef).into(),
-        warning: rgb(0xdf8e1d).into(),
-        warning_active: rgb(0xdf8e1d).into(),
-        warning_hover: Hsla::from(rgb(0xdf8e1d)).opacity(0.9),
-        warning_foreground: rgb(0xeff1f5).into(),
-        window_border: rgb(0xccd0da).into(),
+pub static THEMES: LazyLock<HashMap<SharedString, ThemeConfig>> = LazyLock::new(|| {
+    fn parse_themes(source: &str) -> ThemeSet {
+        serde_json::from_str(source).unwrap()
     }
-}
 
-/// Catppuccin Macchiato (Dark) theme colors
-pub fn catppuccin_macchiato() -> ThemeColor {
-    ThemeColor {
-        accent: rgba(0xc6aaf666).into(),
-        accent_foreground: rgba(0xbac1f766).into(),
-        accordion: rgb(0x181926).into(),
-        accordion_active: rgb(0x363a4f).into(),
-        accordion_hover: Hsla::from(rgb(0x494d64)).opacity(0.7),
-        background: rgb(0x2c2f46).into(),
-        border: rgb(0x363a4f).into(),
-        card: rgb(0x1e2030).into(),
-        card_foreground: rgb(0xcad3f5).into(),
-        caret: rgb(0xf4dbd6).into(),
-        chart_1: rgb(0x8aadf4).into(),
-        chart_2: rgb(0xa6da95).into(),
-        chart_3: rgb(0xeed49f).into(),
-        chart_4: rgb(0xed8796).into(),
-        chart_5: rgb(0xc6a0f6).into(),
-        danger: rgb(0xed8796).into(),
-        danger_active: rgb(0xed8796).into(),
-        danger_foreground: rgb(0x24273a).into(),
-        danger_hover: Hsla::from(rgb(0xed8796)).opacity(0.9),
-        description_list_label: rgb(0xa5adcb).into(),
-        description_list_label_foreground: rgb(0xcad3f5).into(),
-        drag_border: rgb(0xc6a0f6).into(),
-        drop_target: Hsla::from(rgb(0x363a4f)).opacity(0.25),
-        foreground: rgb(0xcad3f5).into(),
-        info: rgb(0x8bd5ca).into(),
-        info_active: rgb(0x8bd5ca).into(),
-        info_foreground: rgb(0x24273a).into(),
-        info_hover: Hsla::from(rgb(0x8bd5ca)).opacity(0.9),
-        input: rgb(0x181926).into(),
-        link: rgb(0x8aadf4).into(),
-        link_active: Hsla::from(rgb(0x91d7e3)).darken(0.2),
-        link_hover: Hsla::from(rgb(0x91d7e3)).lighten(0.2),
-        list: rgb(0x24273a).into(),
-        list_active: Hsla::from(rgb(0x363a4f)).opacity(0.2),
-        list_active_border: rgb(0xc6a0f6).into(),
-        list_even: rgb(0x1e2030).into(),
-        list_head: rgb(0x181926).into(),
-        list_hover: rgb(0x494d64).into(),
-        muted: rgb(0x1e2030).into(),
-        muted_foreground: rgb(0xa5adcb).into(),
-        overlay: Hsla::from(rgb(0x6e738d)).opacity(0.06),
-        popover: rgb(0x24273a).into(),
-        popover_foreground: rgb(0xcad3f5).into(),
-        primary: rgb(0xc6a0f6).into(),
-        primary_active: rgb(0xc6a0f6).into(),
-        primary_foreground: rgb(0x24273a).into(),
-        primary_hover: rgb(0xc6a0f6).into(),
-        progress_bar: rgb(0xc6a0f6).into(),
-        ring: rgb(0xc6a0f6).into(),
-        scrollbar: Hsla::from(rgb(0x494d64)).opacity(0.95),
-        scrollbar_thumb: Hsla::from(rgb(0xc6a0f6)).opacity(0.9),
-        scrollbar_thumb_hover: rgb(0x6e738d).into(),
-        secondary: rgb(0x181926).into(),
-        secondary_active: rgb(0x494d64).into(),
-        secondary_foreground: rgb(0xcad3f5).into(),
-        secondary_hover: rgb(0x363a4f).into(),
-        selection: rgb(0x5b6078).into(),
-        sidebar: rgb(0x1e2030).into(),
-        sidebar_accent: rgb(0xc6aaf666).into(),
-        sidebar_accent_foreground: rgb(0xbac1f766).into(),
-        sidebar_border: rgb(0x363a4f).into(),
-        sidebar_foreground: rgb(0xcad3f5).into(),
-        sidebar_primary: rgb(0xc6a0f6).into(),
-        sidebar_primary_foreground: rgb(0x24273a).into(),
-        skeleton: Hsla::from(rgb(0x494d64)).opacity(0.1),
-        slider_bar: rgb(0x181926).into(),
-        slider_thumb: rgb(0xc6a0f6).into(),
-        success: rgb(0xa6da95).into(),
-        success_foreground: rgb(0x24273a).into(),
-        success_hover: Hsla::from(rgb(0xa6da95)).opacity(0.9),
-        success_active: rgb(0xa6da95).into(),
-        switch: rgb(0xc6a0f6).into(),
-        tab: rgb(0x1e2030).into(),
-        tab_active: rgb(0x24273a).into(),
-        tab_active_foreground: rgb(0xcad3f5).into(),
-        tab_bar: rgb(0x181926).into(),
-        tab_bar_segmented: rgb(0x181926).into(),
-        tab_foreground: rgb(0xa5adcb).into(),
-        table: rgb(0x24273a).into(),
-        table_active: Hsla::from(rgb(0x363a4f)).opacity(0.2),
-        table_active_border: rgb(0xc6a0f6).into(),
-        table_even: rgb(0x1e2030).into(),
-        table_head: rgb(0x181926).into(),
-        table_head_foreground: rgb(0xcad3f5).into(),
-        table_hover: rgb(0x494d64).into(),
-        table_row_border: rgb(0x363a4f).into(),
-        title_bar: rgb(0x181926).into(),
-        title_bar_border: rgb(0x363a4f).into(),
-        tiles: rgb(0x1e2030).into(),
-        warning: rgb(0xeed49f).into(),
-        warning_active: rgb(0xeed49f).into(),
-        warning_hover: Hsla::from(rgb(0xeed49f)).opacity(0.9),
-        warning_foreground: rgb(0x24273a).into(),
-        window_border: rgb(0x363a4f).into(),
+    let mut themes = HashMap::new();
+    for source in [include_str!("./catppuccin.json")] {
+        let theme_set = parse_themes(source);
+        for theme in theme_set.themes {
+            themes.insert(theme.name.clone(), theme);
+        }
+    }
+
+    themes
+});
+
+// Apply a Catppuccin theme by color mode
+pub fn change_color_mode(mode: ThemeMode, _win: &mut Window, cx: &mut App) {
+    let theme_name = match mode {
+        ThemeMode::Light => "Catppuccin Latte",
+        ThemeMode::Dark => "Catppuccin Macchiato",
+    };
+
+    if let Some(theme_config) = THEMES.get(theme_name) {
+        Theme::global_mut(cx).apply_config(theme_config);
+    } else if theme_name == "Catppuccin Latte" {
+        Theme::global_mut(cx).set_default_light();
+    } else if theme_name == "Catppuccin Macchiato" {
+        Theme::global_mut(cx).set_default_dark();
     }
 }

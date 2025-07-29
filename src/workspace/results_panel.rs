@@ -5,7 +5,7 @@ use gpui::*;
 use gpui_component::{
     ActiveTheme as _, Size, StyleSized, h_flex,
     label::Label,
-    table::{self, ColFixed, Table, TableDelegate},
+    table::{Column, Table, TableDelegate},
     v_flex,
 };
 use serde::Deserialize;
@@ -14,7 +14,6 @@ use serde::Deserialize;
 #[action(namespace = results_panel, no_json)]
 struct ChangeSize(Size);
 
-
 pub struct ResultsPanel {
     current_result: Option<QueryExecutionResult>,
     table: Entity<Table<ResultsTableDelegate>>,
@@ -22,16 +21,11 @@ pub struct ResultsPanel {
 }
 
 struct ResultsTableDelegate {
-    columns: Vec<String>,
+    columns: Vec<Column>,
     rows: Vec<Vec<String>>,
     size: Size,
-    col_resize: bool,
-    col_order: bool,
-    col_selection: bool,
     loading: bool,
-    fixed_cols: bool,
     visible_rows: Range<usize>,
-    visible_cols: Range<usize>,
 }
 
 impl ResultsTableDelegate {
@@ -40,24 +34,25 @@ impl ResultsTableDelegate {
             size: Size::default(),
             rows: vec![],
             columns: vec![],
-            col_resize: true,
-            col_order: false,
-            col_selection: false,
-            fixed_cols: false,
             loading: false,
-            visible_cols: 0..3,
             visible_rows: Range::default(),
         }
     }
 
     pub fn update(&mut self, result: QueryResult) {
         self.rows = result.rows.clone();
-        self.columns = result.columns.clone();
+        let columns: Vec<Column> = result
+            .columns
+            .clone()
+            .iter()
+            .map(|c| Column::new(c, c)) // TODO: Create pretty column name
+            .collect();
+        self.columns = columns;
     }
 }
 
 impl TableDelegate for ResultsTableDelegate {
-    fn cols_count(&self, _: &App) -> usize {
+    fn columns_count(&self, _: &App) -> usize {
         self.columns.len()
     }
 
@@ -65,50 +60,8 @@ impl TableDelegate for ResultsTableDelegate {
         self.rows.len()
     }
 
-    fn col_name(&self, col_ix: usize, _: &App) -> SharedString {
-        if let Some(col) = self.columns.get(col_ix) {
-            col.clone().into()
-        } else {
-            "--".into()
-        }
-    }
-
-    fn col_width(&self, col_ix: usize, _: &App) -> Pixels {
-        if col_ix < 10 {
-            120.0.into()
-        } else if col_ix < 20 {
-            80.0.into()
-        } else {
-            130.0.into()
-        }
-    }
-
-    fn col_padding(&self, col_ix: usize, _: &App) -> Option<Edges<Pixels>> {
-        if col_ix >= 3 && col_ix <= 10 {
-            Some(Edges::all(px(0.)))
-        } else {
-            None
-        }
-    }
-
-    fn col_fixed(&self, col_ix: usize, _: &App) -> Option<table::ColFixed> {
-        if !self.fixed_cols {
-            return None;
-        }
-
-        if col_ix < 4 {
-            Some(ColFixed::Left)
-        } else {
-            None
-        }
-    }
-
-    fn can_resize_col(&self, col_ix: usize, _: &App) -> bool {
-        return self.col_resize && col_ix > 1;
-    }
-
-    fn can_select_col(&self, _: usize, _: &App) -> bool {
-        return self.col_selection;
+    fn column(&self, col_ix: usize, _: &App) -> &Column {
+        self.columns.get(col_ix).unwrap()
     }
 
     fn render_th(
@@ -117,7 +70,7 @@ impl TableDelegate for ResultsTableDelegate {
         _: &mut Window,
         cx: &mut Context<Table<Self>>,
     ) -> impl IntoElement {
-        let th = div().child(self.col_name(col_ix, cx));
+        let th = div().child(format!("{}", self.column(col_ix, cx).name));
 
         if col_ix >= 3 && col_ix <= 10 {
             th.table_cell_size(self.size)
@@ -158,15 +111,7 @@ impl TableDelegate for ResultsTableDelegate {
         "--".into_any_element()
     }
 
-    fn can_loop_select(&self, _: &App) -> bool {
-        false
-    }
-
-    fn can_move_col(&self, _: usize, _: &App) -> bool {
-        self.col_order
-    }
-
-    fn move_col(
+    fn move_column(
         &mut self,
         col_ix: usize,
         to_ix: usize,
@@ -210,15 +155,6 @@ impl TableDelegate for ResultsTableDelegate {
         _: &mut Context<Table<Self>>,
     ) {
         self.visible_rows = visible_range;
-    }
-
-    fn visible_cols_changed(
-        &mut self,
-        visible_range: Range<usize>,
-        _: &mut Window,
-        _: &mut Context<Table<Self>>,
-    ) {
-        self.visible_cols = visible_range;
     }
 }
 

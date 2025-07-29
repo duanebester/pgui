@@ -1,17 +1,14 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
-    ActiveTheme as _, IconName, Sizable as _,
+    ActiveTheme as _, IconName, Sizable as _, ThemeMode,
     button::{Button, ButtonVariants as _},
     label::Label,
 };
 
-use crate::apply_catppuccin_theme;
+use crate::themes::*;
 
-#[cfg(target_os = "macos")]
 const TITLE_BAR_LEFT_PADDING: Pixels = px(80.);
-#[cfg(not(target_os = "macos"))]
-const TITLE_BAR_LEFT_PADDING: Pixels = px(12.);
 
 pub struct HeaderBar {}
 
@@ -22,16 +19,13 @@ impl HeaderBar {
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(window, cx))
     }
-    pub fn change_color_mode(
-        &mut self,
-        _: &ClickEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        match cx.theme().mode.is_dark() {
-            true => apply_catppuccin_theme("latte", window, cx),
-            false => apply_catppuccin_theme("macchiato", window, cx),
+    pub fn change_mode(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+        let new_mode = if cx.theme().mode.is_dark() {
+            ThemeMode::Light
+        } else {
+            ThemeMode::Dark
         };
+        change_color_mode(new_mode, window, cx);
     }
 }
 
@@ -47,7 +41,7 @@ impl Render for HeaderBar {
             })
             .small()
             .ghost()
-            .on_click(cx.listener(Self::change_color_mode));
+            .on_click(cx.listener(Self::change_mode));
 
         let github_button = Button::new("github")
             .icon(IconName::GitHub)

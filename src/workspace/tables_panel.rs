@@ -373,7 +373,7 @@ impl Render for TablesPanel {
             .size_full()
             .gap_2()
             .p_3()
-            .bg(cx.theme().sidebar)
+            .bg(cx.theme().sidebar_primary_foreground)
             .child(header)
             .child(
                 Label::new(status_text)

@@ -162,6 +162,7 @@ impl Workspace {
 impl Render for Workspace {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let sidebar = div()
+            .id("workspace-sidebar")
             .flex()
             .h_full()
             .border_color(cx.theme().border)
@@ -189,12 +190,20 @@ impl Render for Workspace {
                 ),
         );
 
+        let content = div()
+            .id("workspace-content")
+            .flex()
+            .flex_grow()
+            .bg(cx.theme().background)
+            .child(sidebar)
+            .child(main);
+
         div()
             .flex()
             .flex_col()
             .size_full()
             .child(self.header_bar.clone())
-            .child(div().flex().flex_grow().child(sidebar).child(main))
+            .child(content)
             .child(self.footer_bar.clone())
     }
 }

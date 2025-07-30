@@ -3,7 +3,7 @@ use std::time::Duration;
 use crate::services::SqlQueryAnalyzer;
 use gpui::*;
 use gpui_component::{
-    ActiveTheme as _, Disableable as _, Icon, Sizable as _,
+    Disableable as _, Icon, Sizable as _,
     button::Button,
     h_flex,
     highlighter::Language,
@@ -139,12 +139,10 @@ impl Render for Editor {
             .on_click(cx.listener(Self::format_query));
 
         let toolbar = h_flex()
-            .justify_between()
+            .id("editor-toolbar")
+            .justify_end()
             .items_center()
-            .p_2()
-            .border_b_1()
-            .border_color(cx.theme().border)
-            .bg(cx.theme().background)
+            .pr_2()
             .child(
                 h_flex()
                     .gap_2()
@@ -153,15 +151,19 @@ impl Render for Editor {
                     .child(execute_button),
             );
 
-        v_flex().size_full().child(toolbar).child(
-            div()
-                .id("editor-content")
-                .w_full()
-                .flex_1()
-                .p_4()
-                .font_family("Monaco")
-                .text_size(px(12.))
-                .child(TextInput::new(&self.input_state).h_full()),
-        )
+        v_flex()
+            .size_full()
+            .child(
+                div()
+                    .id("editor-content")
+                    .w_full()
+                    .flex_1()
+                    .p_2()
+                    .font_family("Monaco")
+                    .text_size(px(12.))
+                    .child(TextInput::new(&self.input_state).h_full()),
+            )
+            .p_2()
+            .child(toolbar)
     }
 }

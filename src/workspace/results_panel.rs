@@ -237,7 +237,7 @@ impl Render for ResultsPanel {
             Some(QueryExecutionResult::Error(error)) => v_flex().size_full().p_4().child(
                 div()
                     .p_4()
-                    .bg(cx.theme().danger.opacity(0.1))
+                    .bg(cx.theme().danger)
                     .border_1()
                     .border_color(cx.theme().danger)
                     .rounded(cx.theme().radius)

@@ -11,7 +11,7 @@ use gpui_component::{
     v_flex,
 };
 
-use crate::services::DatabaseManager;
+use crate::services::*;
 
 pub enum ConnectionEvent {
     Connected(Arc<DatabaseManager>),
@@ -20,15 +20,6 @@ pub enum ConnectionEvent {
 }
 
 impl EventEmitter<ConnectionEvent> for ConnectionsPanel {}
-
-#[derive(Debug, Clone)]
-pub struct ConnectionInfo {
-    pub hostname: String,
-    pub username: String,
-    pub password: String,
-    pub database: String,
-    pub port: String,
-}
 
 #[derive(IntoElement)]
 struct ConnectionListItem {
@@ -97,16 +88,17 @@ impl RenderOnce for ConnectionListItem {
                             .flex_1()
                             .overflow_x_hidden()
                             .child(
-                                Label::new(self.connection.database.clone())
-                                    .font_medium()
+                                Label::new(self.connection.name.clone())
+                                    .font_semibold()
                                     .whitespace_nowrap(),
                             )
                             .child(
                                 Label::new(format!(
-                                    "{}@{}:{}",
+                                    "{}@{}:{}/{}",
                                     self.connection.username,
                                     self.connection.hostname,
-                                    self.connection.port
+                                    self.connection.port,
+                                    self.connection.database
                                 ))
                                 .text_xs()
                                 .text_color(text_color.opacity(0.6))
@@ -204,20 +196,8 @@ impl ListDelegate for ConnectionListDelegate {
 impl ConnectionListDelegate {
     fn new() -> Self {
         Self {
-            connections: vec![ConnectionInfo {
-                username: "test".to_string(),
-                password: "test".to_string(),
-                database: "test".to_string(),
-                hostname: "localhost".to_string(),
-                port: "5432".to_string(),
-            }],
-            matched_connections: vec![ConnectionInfo {
-                username: "test".to_string(),
-                password: "test".to_string(),
-                database: "test".to_string(),
-                hostname: "localhost".to_string(),
-                port: "5432".to_string(),
-            }],
+            connections: vec![],
+            matched_connections: vec![],
             selected_index: None,
             query: String::new(),
         }
@@ -277,6 +257,16 @@ impl ConnectionsPanel {
                 _ => {}
             },
         )];
+
+        let conn_list_clone = connection_list.clone();
+        cx.spawn(async move |_view, cx| {
+            let connections = load_connections().await;
+            let _ = cx.update_entity(&conn_list_clone, |list, cx| {
+                list.delegate_mut().update_connections(connections);
+                cx.notify();
+            });
+        })
+        .detach();
 
         Self {
             db_manager: Arc::new(DatabaseManager::new()),
@@ -422,7 +412,7 @@ impl Render for ConnectionsPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .size_full()
-            .bg(cx.theme().sidebar)
+            .bg(cx.theme().sidebar_primary_foreground)
             .child(self.render_connection_section(cx))
             .child(self.render_connections_list(cx))
     }

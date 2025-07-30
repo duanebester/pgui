@@ -14,7 +14,7 @@ chmod +x build_complete_app.sh
 This will:
 1. Build the release executable with `cargo build --release`
 2. Create the Mac app bundle structure
-3. Generate an app icon from your existing SVG icon
+3. Generate an app icon from an existing SVG icon
 4. Create a complete `PGUI.app` that you can double-click to run
 
 ## What Gets Created
@@ -26,9 +26,9 @@ PGUI.app/
 ├── Contents/
 │   ├── Info.plist          # App metadata
 │   ├── MacOS/
-│   │   └── PGUI           # Your executable
+│   │   └── PGUI           # Executable
 │   └── Resources/
-│       └── AppIcon.icns   # App icon
+│       └── AppIcon.icns    # App icon
 ```
 
 ## Using Your App

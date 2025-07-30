@@ -4,7 +4,7 @@
 set -e
 
 APP_NAME="PGUI"
-BUNDLE_ID="com.yourname.pgui"
+BUNDLE_ID="com.duanebester.pgui"
 VERSION="1.0.0"
 EXECUTABLE_NAME="pgui"
 SVG_FILE="assets/icons/database-zap.svg"

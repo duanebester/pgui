@@ -88,26 +88,39 @@ ICONSET_DIR="${APP_NAME}.iconset"
 rm -rf "$ICONSET_DIR"
 mkdir "$ICONSET_DIR"
 
-# Generate PNG files in different sizes
-declare -A sizes=(
-    ["icon_16x16.png"]=16
-    ["icon_16x16@2x.png"]=32
-    ["icon_32x32.png"]=32
-    ["icon_32x32@2x.png"]=64
-    ["icon_128x128.png"]=128
-    ["icon_128x128@2x.png"]=256
-    ["icon_256x256.png"]=256
-    ["icon_256x256@2x.png"]=512
-    ["icon_512x512.png"]=512
-    ["icon_512x512@2x.png"]=1024
-)
+# Generate PNG files in different sizes - using a simpler approach
+echo "Generating icon_16x16.png (16x16)..."
+rsvg-convert -w 16 -h 16 "$SVG_FILE" -o "$ICONSET_DIR/icon_16x16.png"
 
-for filename in "${!sizes[@]}"; do
-    size=${sizes[$filename]}
-    rsvg-convert -w $size -h $size "$SVG_FILE" -o "$ICONSET_DIR/$filename"
-done
+echo "Generating icon_16x16@2x.png (32x32)..."
+rsvg-convert -w 32 -h 32 "$SVG_FILE" -o "$ICONSET_DIR/icon_16x16@2x.png"
+
+echo "Generating icon_32x32.png (32x32)..."
+rsvg-convert -w 32 -h 32 "$SVG_FILE" -o "$ICONSET_DIR/icon_32x32.png"
+
+echo "Generating icon_32x32@2x.png (64x64)..."
+rsvg-convert -w 64 -h 64 "$SVG_FILE" -o "$ICONSET_DIR/icon_32x32@2x.png"
+
+echo "Generating icon_128x128.png (128x128)..."
+rsvg-convert -w 128 -h 128 "$SVG_FILE" -o "$ICONSET_DIR/icon_128x128.png"
+
+echo "Generating icon_128x128@2x.png (256x256)..."
+rsvg-convert -w 256 -h 256 "$SVG_FILE" -o "$ICONSET_DIR/icon_128x128@2x.png"
+
+echo "Generating icon_256x256.png (256x256)..."
+rsvg-convert -w 256 -h 256 "$SVG_FILE" -o "$ICONSET_DIR/icon_256x256.png"
+
+echo "Generating icon_256x256@2x.png (512x512)..."
+rsvg-convert -w 512 -h 512 "$SVG_FILE" -o "$ICONSET_DIR/icon_256x256@2x.png"
+
+echo "Generating icon_512x512.png (512x512)..."
+rsvg-convert -w 512 -h 512 "$SVG_FILE" -o "$ICONSET_DIR/icon_512x512.png"
+
+echo "Generating icon_512x512@2x.png (1024x1024)..."
+rsvg-convert -w 1024 -h 1024 "$SVG_FILE" -o "$ICONSET_DIR/icon_512x512@2x.png"
 
 # Convert to icns file
+echo "Converting to .icns format..."
 iconutil -c icns "$ICONSET_DIR" -o "$APP_DIR/Contents/Resources/AppIcon.icns"
 
 # Clean up

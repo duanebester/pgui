@@ -7,8 +7,7 @@ This guide explains how to create a native Mac app bundle from your PGUI executa
 Run the complete build script:
 
 ```bash
-chmod +x build_complete_app.sh
-./build_complete_app.sh
+cargo run --bin build-app
 ```
 
 This will:

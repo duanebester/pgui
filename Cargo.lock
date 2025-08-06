@@ -4238,6 +4238,7 @@ dependencies = [
  "anyhow",
  "async-channel 2.5.0",
  "async-std",
+ "chrono",
  "futures",
  "gpui",
  "gpui-component",

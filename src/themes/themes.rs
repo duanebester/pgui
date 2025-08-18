@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::LazyLock;
 
 use gpui::*;
@@ -31,10 +32,9 @@ pub fn change_color_mode(mode: ThemeMode, _win: &mut Window, cx: &mut App) {
     };
 
     if let Some(theme_config) = THEMES.get(theme_name) {
-        Theme::global_mut(cx).apply_config(theme_config);
-    } else if theme_name == "Catppuccin Latte" {
-        Theme::global_mut(cx).set_default_light();
-    } else if theme_name == "Catppuccin Macchiato" {
-        Theme::global_mut(cx).set_default_dark();
+        let theme_config = Rc::new(theme_config.clone());
+        let theme = Theme::global_mut(cx);
+        theme.mode = theme_config.mode;
+        theme.apply_config(&theme_config);
     }
 }

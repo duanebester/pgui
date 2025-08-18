@@ -1,7 +1,8 @@
 [package]
 name = "pgui"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
+default-run = "pgui"
 
 [[bin]]
 name = "build-app"
@@ -14,7 +15,7 @@ async-std = "1"
 chrono = "0.4"
 futures = "0.3"
 gpui = { git = "https://github.com/zed-industries/zed.git" }
-gpui-component = { git = "https://github.com/longbridge/gpui-component.git" }
+gpui-component = { git = "https://github.com/longbridge/gpui-component.git", features = ["tree-sitter-languages"] }
 hex = "0.4"
 rust-embed = "8.2.0"
 rust_decimal = "1.37.1"

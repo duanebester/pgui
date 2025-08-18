@@ -2,7 +2,7 @@ use super::connections_panel::ConnectionEvent;
 use crate::services::{DatabaseManager, TableInfo};
 use gpui::*;
 use gpui_component::{
-    ActiveTheme as _, Disableable, Icon, IconName, Selectable, Sizable as _, StyledExt,
+    ActiveTheme as _, Disableable, Icon, IconName, IndexPath, Selectable, Sizable as _, StyledExt,
     button::{Button, ButtonVariants as _},
     h_flex,
     label::Label,
@@ -20,13 +20,13 @@ impl EventEmitter<TableEvent> for TablesPanel {}
 #[derive(IntoElement)]
 struct TableListItem {
     base: ListItem,
-    ix: usize,
+    ix: IndexPath,
     table: TableInfo,
     selected: bool,
 }
 
 impl TableListItem {
-    pub fn new(id: impl Into<ElementId>, table: TableInfo, ix: usize, selected: bool) -> Self {
+    pub fn new(id: impl Into<ElementId>, table: TableInfo, ix: IndexPath, selected: bool) -> Self {
         Self {
             table,
             ix,
@@ -57,7 +57,7 @@ impl RenderOnce for TableListItem {
 
         let bg_color = if self.selected {
             cx.theme().list_active.opacity(0.2)
-        } else if self.ix % 2 == 0 {
+        } else if self.ix.row % 2 == 0 {
             cx.theme().list
         } else {
             cx.theme().list_even
@@ -107,14 +107,14 @@ impl RenderOnce for TableListItem {
 struct TableListDelegate {
     tables: Vec<TableInfo>,
     matched_tables: Vec<TableInfo>,
-    selected_index: Option<usize>,
+    selected_index: Option<IndexPath>,
     query: String,
 }
 
 impl ListDelegate for TableListDelegate {
     type Item = TableListItem;
 
-    fn items_count(&self, _: &App) -> usize {
+    fn items_count(&self, _: usize, _: &App) -> usize {
         self.matched_tables.len()
     }
 
@@ -146,21 +146,13 @@ impl ListDelegate for TableListDelegate {
         Task::ready(())
     }
 
-    fn confirm(&mut self, _secondary: bool, _window: &mut Window, _cx: &mut Context<List<Self>>) {
-        if let Some(selected) = self.selected_index {
-            if let Some(table) = self.matched_tables.get(selected) {
-                println!(
-                    "Selected table: {}.{}",
-                    table.table_schema, table.table_name
-                );
-                // TODO: Emit event or callback for table selection
-            }
-        }
+    fn confirm(&mut self, secondary: bool, _window: &mut Window, _cx: &mut Context<List<Self>>) {
+        println!("Confirmed with secondary: {}", secondary);
     }
 
     fn set_selected_index(
         &mut self,
-        ix: Option<usize>,
+        ix: Option<IndexPath>,
         _: &mut Window,
         cx: &mut Context<List<Self>>,
     ) {
@@ -170,12 +162,12 @@ impl ListDelegate for TableListDelegate {
 
     fn render_item(
         &self,
-        ix: usize,
+        ix: IndexPath,
         _: &mut Window,
         _: &mut Context<List<Self>>,
     ) -> Option<Self::Item> {
         let selected = Some(ix) == self.selected_index;
-        if let Some(table) = self.matched_tables.get(ix) {
+        if let Some(table) = self.matched_tables.get(ix.row) {
             return Some(TableListItem::new(ix, table.clone(), ix, selected));
         }
         None
@@ -183,10 +175,6 @@ impl ListDelegate for TableListDelegate {
 
     fn loading(&self, _: &App) -> bool {
         false // We don't have pagination for tables
-    }
-
-    fn can_load_more(&self, _: &App) -> bool {
-        false // No pagination needed for tables
     }
 
     fn load_more_threshold(&self) -> usize {
@@ -212,14 +200,14 @@ impl TableListDelegate {
         self.tables = tables;
         self.matched_tables = self.tables.clone();
         if !self.matched_tables.is_empty() && self.selected_index.is_none() {
-            self.selected_index = Some(0);
+            self.selected_index = Some(IndexPath::default());
         }
     }
 
     #[allow(dead_code)]
     fn selected_table(&self) -> Option<&TableInfo> {
         self.selected_index
-            .and_then(|ix| self.matched_tables.get(ix))
+            .and_then(|ix| self.matched_tables.get(ix.row))
     }
 }
 
@@ -265,12 +253,12 @@ impl TablesPanel {
         cx.new(|cx| Self::new(window, cx))
     }
 
-    fn get_selected_table(&self, ix: usize, cx: &App) -> Option<TableInfo> {
+    fn get_selected_table(&self, ix: IndexPath, cx: &App) -> Option<TableInfo> {
         self.table_list
             .read(cx)
             .delegate()
             .matched_tables
-            .get(ix)
+            .get(ix.row)
             .cloned()
     }
 

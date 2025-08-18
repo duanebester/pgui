@@ -20,6 +20,7 @@ impl HeaderBar {
         cx.new(|cx| Self::new(window, cx))
     }
     pub fn change_mode(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+        println!("Current mode: {:?}", cx.theme().mode);
         let new_mode = if cx.theme().mode.is_dark() {
             ThemeMode::Light
         } else {

@@ -6,7 +6,6 @@ use gpui_component::{
     Disableable as _, Icon, Sizable as _,
     button::Button,
     h_flex,
-    highlighter::Language,
     input::{InputEvent, InputState, TabSize, TextInput},
     v_flex,
 };
@@ -30,10 +29,10 @@ pub struct Editor {
 
 impl Editor {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let default_language = Language::Sql;
+        let default_language = "sql".to_string();
         let input_state = cx.new(|cx| {
             let mut i = InputState::new(window, cx)
-                .code_editor(default_language.name())
+                .code_editor(default_language)
                 .line_number(true)
                 .tab_size(TabSize {
                     tab_size: 2,

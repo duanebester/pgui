@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -26,7 +26,10 @@ fn main() -> Result<()> {
     println!("   3. Update the bundle ID if needed: {}", BUNDLE_ID);
     println!();
     println!("🔧 Optional: To sign the app for distribution:");
-    println!("   codesign --deep --force --verify --verbose --sign 'Developer ID Application: Your Name' {}.app", APP_NAME);
+    println!(
+        "   codesign --deep --force --verify --verbose --sign 'Developer ID Application: Your Name' {}.app",
+        APP_NAME
+    );
 
     Ok(())
 }
@@ -56,8 +59,7 @@ fn create_app_bundle_structure() -> Result<()> {
 
     // Remove existing app bundle
     if Path::new(&app_dir).exists() {
-        fs::remove_dir_all(&app_dir)
-            .context("Failed to remove existing app bundle")?;
+        fs::remove_dir_all(&app_dir).context("Failed to remove existing app bundle")?;
     }
 
     // Create directory structure
@@ -70,8 +72,7 @@ fn create_app_bundle_structure() -> Result<()> {
     let source_executable = format!("target/release/{}", EXECUTABLE_NAME);
     let target_executable = format!("{}/Contents/MacOS/{}", app_dir, APP_NAME);
 
-    fs::copy(&source_executable, &target_executable)
-        .context("Failed to copy executable")?;
+    fs::copy(&source_executable, &target_executable).context("Failed to copy executable")?;
 
     // Make executable
     let output = Command::new("chmod")
@@ -132,8 +133,7 @@ fn create_info_plist() -> Result<()> {
     );
 
     let plist_path = format!("{}.app/Contents/Info.plist", APP_NAME);
-    fs::write(&plist_path, info_plist_content)
-        .context("Failed to write Info.plist")?;
+    fs::write(&plist_path, info_plist_content).context("Failed to write Info.plist")?;
 
     Ok(())
 }
@@ -148,13 +148,11 @@ fn create_app_icon() -> Result<()> {
 
     // Remove existing iconset directory
     if Path::new(&iconset_dir).exists() {
-        fs::remove_dir_all(&iconset_dir)
-            .context("Failed to remove existing iconset directory")?;
+        fs::remove_dir_all(&iconset_dir).context("Failed to remove existing iconset directory")?;
     }
 
     // Create iconset directory
-    fs::create_dir(&iconset_dir)
-        .context("Failed to create iconset directory")?;
+    fs::create_dir(&iconset_dir).context("Failed to create iconset directory")?;
 
     // Generate PNG files in different sizes
     let icon_sizes = vec![
@@ -176,10 +174,13 @@ fn create_app_icon() -> Result<()> {
         let output_path = format!("{}/{}", iconset_dir, filename);
         let output = Command::new("rsvg-convert")
             .args(&[
-                "-w", &size.to_string(),
-                "-h", &size.to_string(),
+                "-w",
+                &size.to_string(),
+                "-h",
+                &size.to_string(),
                 SVG_FILE,
-                "-o", &output_path
+                "-o",
+                &output_path,
             ])
             .output()
             .context("Failed to run rsvg-convert")?;
@@ -209,8 +210,7 @@ fn create_app_icon() -> Result<()> {
     }
 
     // Clean up iconset directory
-    fs::remove_dir_all(&iconset_dir)
-        .context("Failed to clean up iconset directory")?;
+    fs::remove_dir_all(&iconset_dir).context("Failed to clean up iconset directory")?;
 
     Ok(())
 }

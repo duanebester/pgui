@@ -126,10 +126,6 @@ impl TableDelegate for ResultsTableDelegate {
         false
     }
 
-    fn can_load_more(&self, _: &App) -> bool {
-        false
-    }
-
     fn load_more_threshold(&self) -> usize {
         150
     }

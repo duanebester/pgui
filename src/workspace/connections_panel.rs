@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use gpui::*;
 use gpui_component::{
-    ActiveTheme as _, Disableable, Icon, Selectable, Sizable as _, StyledExt,
+    ActiveTheme as _, Disableable, Icon, IndexPath, Selectable, Sizable as _, StyledExt,
     button::{Button, ButtonVariants as _},
     h_flex,
     input::{InputState, TextInput},
@@ -24,7 +24,7 @@ impl EventEmitter<ConnectionEvent> for ConnectionsPanel {}
 #[derive(IntoElement)]
 struct ConnectionListItem {
     base: ListItem,
-    ix: usize,
+    ix: IndexPath,
     connection: ConnectionInfo,
     selected: bool,
 }
@@ -33,7 +33,7 @@ impl ConnectionListItem {
     pub fn new(
         id: impl Into<ElementId>,
         connection: ConnectionInfo,
-        ix: usize,
+        ix: IndexPath,
         selected: bool,
     ) -> Self {
         Self {
@@ -66,7 +66,7 @@ impl RenderOnce for ConnectionListItem {
 
         let bg_color = if self.selected {
             cx.theme().list_active.opacity(0.2)
-        } else if self.ix % 2 == 0 {
+        } else if self.ix.row % 2 == 0 {
             cx.theme().list
         } else {
             cx.theme().list_even
@@ -112,14 +112,14 @@ impl RenderOnce for ConnectionListItem {
 struct ConnectionListDelegate {
     connections: Vec<ConnectionInfo>,
     matched_connections: Vec<ConnectionInfo>,
-    selected_index: Option<usize>,
+    selected_index: Option<IndexPath>,
     query: String,
 }
 
 impl ListDelegate for ConnectionListDelegate {
     type Item = ConnectionListItem;
 
-    fn items_count(&self, _: &App) -> usize {
+    fn items_count(&self, _section: usize, _app: &App) -> usize {
         self.matched_connections.len()
     }
 
@@ -147,7 +147,7 @@ impl ListDelegate for ConnectionListDelegate {
 
     fn confirm(&mut self, _secondary: bool, _window: &mut Window, _cx: &mut Context<List<Self>>) {
         if let Some(selected) = self.selected_index {
-            if let Some(conn) = self.matched_connections.get(selected) {
+            if let Some(conn) = self.matched_connections.get(selected.row) {
                 println!("Selected conn: {}@{}", conn.username, conn.hostname);
             }
         }
@@ -155,7 +155,7 @@ impl ListDelegate for ConnectionListDelegate {
 
     fn set_selected_index(
         &mut self,
-        ix: Option<usize>,
+        ix: Option<IndexPath>,
         _: &mut Window,
         cx: &mut Context<List<Self>>,
     ) {
@@ -165,12 +165,12 @@ impl ListDelegate for ConnectionListDelegate {
 
     fn render_item(
         &self,
-        ix: usize,
+        ix: IndexPath,
         _: &mut Window,
         _: &mut Context<List<Self>>,
     ) -> Option<Self::Item> {
         let selected = Some(ix) == self.selected_index;
-        if let Some(conn) = self.matched_connections.get(ix) {
+        if let Some(conn) = self.matched_connections.get(ix.row) {
             return Some(ConnectionListItem::new(ix, conn.clone(), ix, selected));
         }
         None
@@ -178,10 +178,6 @@ impl ListDelegate for ConnectionListDelegate {
 
     fn loading(&self, _: &App) -> bool {
         false // We don't have pagination for tables
-    }
-
-    fn can_load_more(&self, _: &App) -> bool {
-        false // No pagination needed for tables
     }
 
     fn load_more_threshold(&self) -> usize {
@@ -208,14 +204,14 @@ impl ConnectionListDelegate {
         self.connections = connections;
         self.matched_connections = self.connections.clone();
         if !self.matched_connections.is_empty() && self.selected_index.is_none() {
-            self.selected_index = Some(0);
+            self.selected_index = Some(IndexPath::default());
         }
     }
 
     #[allow(dead_code)]
     fn selected_connection(&self) -> Option<&ConnectionInfo> {
         self.selected_index
-            .and_then(|ix| self.matched_connections.get(ix))
+            .and_then(|ix| self.matched_connections.get(ix.row))
     }
 }
 
@@ -282,12 +278,12 @@ impl ConnectionsPanel {
         cx.new(|cx| Self::new(window, cx))
     }
 
-    fn get_selected_connection(&self, ix: usize, cx: &App) -> Option<ConnectionInfo> {
+    fn get_selected_connection(&self, ix: IndexPath, cx: &App) -> Option<ConnectionInfo> {
         self.connection_list
             .read(cx)
             .delegate()
             .matched_connections
-            .get(ix)
+            .get(ix.row)
             .cloned()
     }
 

@@ -4,13 +4,13 @@ mod themes;
 mod window;
 mod workspace;
 
-use assets::Assets;
+use assets::*;
 use themes::*;
 use window::*;
+use workspace::*;
 
 use gpui::*;
 use gpui_component::{ActiveTheme as _, Root, init, theme};
-use workspace::Workspace;
 
 fn main() {
     let application = Application::new().with_assets(Assets);

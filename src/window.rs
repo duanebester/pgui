@@ -12,6 +12,7 @@ pub fn get_window_options(cx: &mut App) -> WindowOptions {
     WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
         titlebar: Some(TitleBar::title_bar_options()),
+        window_decorations: Some(WindowDecorations::Client),
         ..Default::default()
     }
 }

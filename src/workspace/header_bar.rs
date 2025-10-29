@@ -1,14 +1,13 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::{
-    ActiveTheme as _, IconName, Sizable as _, ThemeMode,
+    ActiveTheme as _, IconName, Sizable as _, ThemeMode, TitleBar,
     button::{Button, ButtonVariants as _},
+    h_flex,
     label::Label,
 };
 
 use crate::themes::*;
-
-const TITLE_BAR_LEFT_PADDING: Pixels = px(80.);
 
 pub struct HeaderBar {}
 
@@ -50,27 +49,20 @@ impl Render for HeaderBar {
             .ghost()
             .on_click(|_, _, cx| cx.open_url("https://github.com/duanebester/pgui"));
 
-        div()
-            .id("header-bar")
-            .border_b_1()
-            .bg(cx.theme().title_bar)
-            .border_color(cx.theme().border)
-            .pl(TITLE_BAR_LEFT_PADDING)
-            .child(
-                div()
-                    .flex()
-                    .justify_between()
-                    .items_center()
-                    .p_1()
-                    .child(Label::new("PGUI").text_xs())
-                    .child(
-                        div()
-                            .pr(px(5.0))
-                            .flex()
-                            .items_center()
-                            .child(theme_toggle)
-                            .child(github_button),
-                    ),
-            )
+        TitleBar::new().child(
+            h_flex()
+                .w_full()
+                .pr_2()
+                .justify_between()
+                .child(Label::new("PGUI").text_xs())
+                .child(
+                    div()
+                        .pr(px(5.0))
+                        .flex()
+                        .items_center()
+                        .child(theme_toggle)
+                        .child(github_button),
+                ),
+        )
     }
 }

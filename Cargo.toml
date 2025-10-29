@@ -1,6 +1,6 @@
 [package]
 name = "pgui"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 default-run = "pgui"
 
@@ -14,8 +14,8 @@ async-channel = "2.3"
 async-std = "1"
 chrono = "0.4"
 futures = "0.3"
-gpui = "0.2.0"
-gpui-component = { version = "0.2.0", features = ["tree-sitter-languages"] }
+gpui = "0.2.2"
+gpui-component = { version = "0.3.1", features = ["tree-sitter-languages"] }
 hex = "0.4"
 rust-embed = "8.2.0"
 rust_decimal = "1.37.1"

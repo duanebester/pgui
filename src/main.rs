@@ -1,10 +1,12 @@
 mod assets;
 mod services;
+mod state;
 mod themes;
 mod window;
 mod workspace;
 
 use assets::*;
+use state::*;
 use themes::*;
 use window::*;
 use workspace::*;
@@ -20,6 +22,9 @@ fn main() {
         cx.open_window(window_options, |win, cx| {
             init(cx);
             theme::init(cx);
+            ConnectionState::init(cx);
+            EditorState::init(cx);
+            LLMState::init(cx);
             change_color_mode(cx.theme().mode, win, cx);
 
             let workspace_view = Workspace::view(win, cx);

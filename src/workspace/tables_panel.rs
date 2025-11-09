@@ -1,6 +1,8 @@
-use super::connections_panel::ConnectionEvent;
-use crate::services::{DatabaseManager, TableInfo};
-use gpui::*;
+use crate::{
+    services::{DatabaseManager, TableInfo},
+    state::{ConnectionState, ConnectionStatus},
+};
+use gpui::{prelude::FluentBuilder as _, *};
 use gpui_component::{
     ActiveTheme as _, Disableable, Icon, IconName, IndexPath, Selectable, Sizable as _, StyledExt,
     button::{Button, ButtonVariants as _},
@@ -9,7 +11,6 @@ use gpui_component::{
     list::{List, ListDelegate, ListEvent, ListItem},
     v_flex,
 };
-use std::sync::Arc;
 
 pub enum TableEvent {
     TableSelected(TableInfo),
@@ -56,7 +57,7 @@ impl RenderOnce for TableListItem {
         };
 
         let bg_color = if self.selected {
-            cx.theme().list_active.opacity(0.2)
+            cx.theme().list_active
         } else if self.ix.row % 2 == 0 {
             cx.theme().list
         } else {
@@ -73,6 +74,9 @@ impl RenderOnce for TableListItem {
             .px_3()
             .py_2()
             .overflow_x_hidden()
+            .when(self.selected, |this| {
+                this.border_color(cx.theme().list_active_border)
+            })
             .bg(bg_color)
             .child(
                 h_flex()
@@ -213,7 +217,7 @@ impl TableListDelegate {
 
 pub struct TablesPanel {
     table_list: Entity<List<TableListDelegate>>,
-    db_manager: Option<Arc<DatabaseManager>>,
+    db_manager: Option<DatabaseManager>,
     is_connected: bool,
     _subscriptions: Vec<Subscription>,
 }
@@ -222,24 +226,37 @@ impl TablesPanel {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let table_list = cx.new(|cx| List::new(TableListDelegate::new(), window, cx));
 
-        let _subscriptions =
-            vec![
-                cx.subscribe(&table_list, |this, _, ev: &ListEvent, cx| match ev {
-                    ListEvent::Select(ix) => {
-                        if let Some(table) = this.get_selected_table(*ix, cx) {
-                            cx.emit(TableEvent::TableSelected(table));
-                        }
+        let _subscriptions = vec![
+            cx.observe_global::<ConnectionState>(move |this, cx| {
+                let state = cx.global::<ConnectionState>();
+                let is_connected = state.connection_state.clone() == ConnectionStatus::Connected;
+
+                this.db_manager = Some(state.db_manager.clone());
+                this.is_connected = is_connected;
+                if is_connected {
+                    this.load_tables(cx);
+                } else {
+                    this.clear_tables(cx);
+                }
+
+                cx.notify();
+            }),
+            cx.subscribe(&table_list, |this, _, ev: &ListEvent, cx| match ev {
+                ListEvent::Select(ix) => {
+                    if let Some(table) = this.get_selected_table(*ix, cx) {
+                        cx.emit(TableEvent::TableSelected(table));
                     }
-                    ListEvent::Confirm(ix) => {
-                        if let Some(table) = this.get_selected_table(*ix, cx) {
-                            cx.emit(TableEvent::TableSelected(table));
-                        }
+                }
+                ListEvent::Confirm(ix) => {
+                    if let Some(table) = this.get_selected_table(*ix, cx) {
+                        cx.emit(TableEvent::TableSelected(table));
                     }
-                    ListEvent::Cancel => {
-                        println!("Table selection cancelled");
-                    }
-                }),
-            ];
+                }
+                ListEvent::Cancel => {
+                    println!("Table selection cancelled");
+                }
+            }),
+        ];
 
         Self {
             table_list,
@@ -260,26 +277,6 @@ impl TablesPanel {
             .matched_tables
             .get(ix.row)
             .cloned()
-    }
-
-    pub fn handle_connection_event(&mut self, event: &ConnectionEvent, cx: &mut Context<Self>) {
-        match event {
-            ConnectionEvent::Connected(db_manager) => {
-                self.db_manager = Some(db_manager.clone());
-                self.is_connected = true;
-                self.load_tables(cx);
-            }
-            ConnectionEvent::Disconnected => {
-                self.db_manager = None;
-                self.is_connected = false;
-                self.clear_tables(cx);
-            }
-            ConnectionEvent::ConnectionError { field1: _str } => {
-                self.db_manager = None;
-                self.is_connected = false;
-                self.clear_tables(cx);
-            }
-        }
     }
 
     fn load_tables(&mut self, cx: &mut Context<Self>) {

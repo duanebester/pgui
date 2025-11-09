@@ -11,6 +11,15 @@ pub struct ConnectionInfo {
     pub port: usize,
 }
 
+impl ConnectionInfo {
+    pub fn to_connection_string(&self) -> String {
+        format!(
+            "postgres://{}:{}@{}:{}/{}",
+            self.username, self.password, self.hostname, self.port, self.database
+        )
+    }
+}
+
 impl Default for ConnectionInfo {
     fn default() -> Self {
         Self {

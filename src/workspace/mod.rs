@@ -1,4 +1,4 @@
-mod connections_panel;
+mod connections;
 mod editor;
 mod footer_bar;
 mod header_bar;

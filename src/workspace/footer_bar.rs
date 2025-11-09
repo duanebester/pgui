@@ -1,24 +1,41 @@
+use gpui::prelude::FluentBuilder as _;
 use gpui::*;
-use gpui_component::button::{Button, ButtonGroup, ButtonVariants};
-use gpui_component::{ActiveTheme, Icon, Selectable, Sizable};
+use gpui_component::button::{Button, ButtonVariants as _};
+use gpui_component::{ActiveTheme, Icon, IconName, Selectable as _, Sizable as _};
+
+use crate::services::ConnectionInfo;
+use crate::state::{ConnectionState, ConnectionStatus};
+
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct FooterBar {
-    connections_active: bool,
+    active_connection: Option<ConnectionInfo>,
     tables_active: bool,
+    is_connected: bool,
+    _subscriptions: Vec<Subscription>,
 }
 
 pub enum FooterBarEvent {
-    ShowConnections,
+    HideTables,
     ShowTables,
 }
 
 impl EventEmitter<FooterBarEvent> for FooterBar {}
 
 impl FooterBar {
-    pub fn new(_window: &mut Window, _cx: &mut Context<Self>) -> Self {
+    pub fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let _subscriptions = vec![cx.observe_global::<ConnectionState>(move |this, cx| {
+            let state = cx.global::<ConnectionState>();
+            this.is_connected = state.connection_state.clone() == ConnectionStatus::Connected;
+            this.active_connection = state.active_connection.clone();
+            cx.notify();
+        })];
+
         Self {
-            connections_active: true,
-            tables_active: false,
+            active_connection: None,
+            tables_active: true,
+            is_connected: false,
+            _subscriptions,
         }
     }
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
@@ -28,35 +45,42 @@ impl FooterBar {
 
 impl Render for FooterBar {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let connections_button = Button::new("connections_panel")
-            .icon(Icon::empty().path("icons/cable.svg"))
+        let tables_button = Button::new("tables_button")
+            .icon(Icon::empty().path("icons/panel-left.svg"))
             .small()
-            .selected(self.connections_active.clone())
             .ghost()
-            .tooltip("Show Connections");
-
-        let tables_button = Button::new("tables_panel")
-            .icon(Icon::empty().path("icons/table-properties.svg"))
-            .small()
             .selected(self.tables_active.clone())
-            .ghost()
-            .tooltip("Show Database Tables");
-
-        let controls = ButtonGroup::new("controls-toggle-group")
-            .ghost()
-            .compact()
-            .child(connections_button)
-            .child(tables_button)
-            .on_click(cx.listener(|this, selected: &Vec<usize>, _, cx| {
-                this.connections_active = selected.contains(&0);
-                this.tables_active = selected.contains(&1);
-                if selected.contains(&0) {
-                    cx.emit(FooterBarEvent::ShowConnections);
-                } else if selected.contains(&1) {
+            .tooltip("Toggle Tables Panel")
+            .on_click(cx.listener(|this, _evt, _win, cx| {
+                this.tables_active = !this.tables_active;
+                if this.tables_active {
                     cx.emit(FooterBarEvent::ShowTables);
+                } else {
+                    cx.emit(FooterBarEvent::HideTables);
                 }
                 cx.notify();
             }));
+
+        let controls = div()
+            .flex()
+            .flex_row()
+            .justify_center()
+            .items_center()
+            .gap_2()
+            .when(!self.is_connected.clone(), |d| d.invisible())
+            .child(tables_button);
+
+        let version = div()
+            .flex()
+            .flex_row()
+            .items_center()
+            .justify_center()
+            .pr_2()
+            .gap_1()
+            .text_xs()
+            .opacity(0.6)
+            .child(format!("v{}", VERSION))
+            .child(Icon::new(IconName::Heart).xsmall());
 
         let footer = div()
             .border_t_1()
@@ -65,10 +89,12 @@ impl Render for FooterBar {
             .border_color(cx.theme().border)
             .flex()
             .flex_row()
-            .justify_start()
+            .justify_between()
             .items_center()
-            .p_2()
-            .child(controls);
+            .py_1()
+            .px_2()
+            .child(controls)
+            .child(version);
 
         footer
     }

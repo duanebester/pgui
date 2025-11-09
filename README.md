@@ -6,25 +6,10 @@ Written in [GPUI](https://gpui.rs) and [GPUI Component](https://github.com/longb
 
 ### Saved Connections
 
-For now, any connections stored in `<HOME_DIR>/.pgui/connections.json` will be picked up.
+Connections will be saved to a sqlite db file in `~/.pgui/connections.db`
 
-Example:
-```json
-[
-  {
-    "id": 1,
-    "name": "TEST",
-    "hostname": "localhost",
-    "port": 5432,
-    "database": "test",
-    "username": "test",
-    "password": "test"
-  }
-]
-```
+As of 2025-11-08:
 
-As of 2025-07-30:
-
-![screengrab](./assets/screenshots/2025-07-30.png)
+![screengrab](./assets/screenshots/2025-11-08.png)
 
 See [Mac App Build](./MAC_APP_BUILD.md) for building locally on MacOS

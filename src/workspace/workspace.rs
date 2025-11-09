@@ -1,4 +1,4 @@
-use super::connections_panel::{ConnectionEvent, ConnectionsPanel};
+use super::connections::ConnectionsPanel;
 use super::editor::EditorEvent;
 use super::footer_bar::{FooterBar, FooterBarEvent};
 use super::header_bar::HeaderBar;
@@ -6,22 +6,26 @@ use super::tables_panel::{TableEvent, TablesPanel};
 use super::{editor::Editor, results_panel::ResultsPanel};
 
 use crate::services::{QueryExecutionResult, TableInfo};
-use gpui::prelude::FluentBuilder;
+use crate::state::{ConnectionState, ConnectionStatus};
+use crate::workspace::connections::ConnectionForm;
+use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 
 use gpui_component::ActiveTheme;
+use gpui_component::indicator::Indicator;
 use gpui_component::resizable::{ResizableState, resizable_panel, v_resizable};
 
 pub struct Workspace {
+    connection_state: ConnectionStatus,
     resize_state: Entity<ResizableState>,
     header_bar: Entity<HeaderBar>,
     footer_bar: Entity<FooterBar>,
     connections_panel: Entity<ConnectionsPanel>,
+    connection_form: Entity<ConnectionForm>,
     tables_panel: Entity<TablesPanel>,
     editor: Entity<Editor>,
     results_panel: Entity<ResultsPanel>,
     _subscriptions: Vec<Subscription>,
-    show_connections: bool,
     show_tables: bool,
 }
 
@@ -31,35 +35,30 @@ impl Workspace {
         let footer_bar = FooterBar::view(window, cx);
         let resize_state = ResizableState::new(cx);
         let connections_panel = ConnectionsPanel::view(window, cx);
+        let connection_form = ConnectionForm::view(window, cx);
         let tables_panel = TablesPanel::view(window, cx);
         let editor = Editor::view(window, cx);
         let results_panel = ResultsPanel::view(window, cx);
 
         let _subscriptions = vec![
+            cx.observe_global::<ConnectionState>(move |this, cx| {
+                this.connection_state = cx.global::<ConnectionState>().connection_state.clone();
+                cx.notify();
+            }),
             cx.subscribe(&editor, |this, _, event: &EditorEvent, cx| match event {
                 EditorEvent::ExecuteQuery(query) => {
                     this.execute_query(query.clone(), cx);
                 }
             }),
-            cx.subscribe(
-                &connections_panel,
-                |this, _, event: &ConnectionEvent, cx| {
-                    this.tables_panel.update(cx, |tables_panel, cx| {
-                        tables_panel.handle_connection_event(event, cx);
-                    });
-                },
-            ),
             cx.subscribe(&tables_panel, |this, _, event: &TableEvent, cx| {
                 this.handle_table_event(event, cx);
             }),
             cx.subscribe(&footer_bar, |this, _, event: &FooterBarEvent, cx| {
                 match event {
-                    FooterBarEvent::ShowConnections => {
-                        this.show_connections = true;
+                    FooterBarEvent::HideTables => {
                         this.show_tables = false;
                     }
                     FooterBarEvent::ShowTables => {
-                        this.show_connections = false;
                         this.show_tables = true;
                     }
                 }
@@ -72,12 +71,13 @@ impl Workspace {
             header_bar,
             footer_bar,
             connections_panel,
+            connection_form,
             tables_panel,
             editor,
             results_panel,
             _subscriptions,
-            show_connections: true,
-            show_tables: false,
+            connection_state: ConnectionStatus::Disconnected,
+            show_tables: true,
         }
     }
 
@@ -91,8 +91,8 @@ impl Workspace {
             editor.set_executing(true, cx);
         });
 
-        // Get database manager from connections panel
-        let db_manager = self.connections_panel.read(cx).db_manager.clone();
+        // Get database manager from global state
+        let db_manager = cx.global::<ConnectionState>().db_manager.clone();
 
         cx.spawn(async move |this, cx| {
             let result = db_manager.execute_query(&query).await;
@@ -124,8 +124,8 @@ impl Workspace {
     }
 
     fn show_table_columns(&mut self, table: TableInfo, cx: &mut Context<Self>) {
-        // Get database manager from connections panel
-        let db_manager = self.connections_panel.read(cx).db_manager.clone();
+        // Get database manager from global state
+        let db_manager = cx.global::<ConnectionState>().db_manager.clone();
 
         cx.spawn(async move |this, cx| {
             let result = db_manager
@@ -157,46 +157,99 @@ impl Workspace {
         })
         .detach();
     }
-}
 
-impl Render for Workspace {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_disconnected(&mut self, cx: &mut Context<Self>) -> Stateful<Div> {
         let sidebar = div()
-            .id("workspace-sidebar")
+            .id("disconnected-sidebar")
             .flex()
             .h_full()
             .border_color(cx.theme().border)
             .border_r_1()
             .min_w(px(300.0))
-            .when(self.show_connections, |this| {
-                this.child(self.connections_panel.clone())
-            })
-            .when(self.show_tables, |this| {
-                this.child(self.tables_panel.clone())
-            });
+            .child(self.connections_panel.clone());
 
-        let main = div().flex().flex_col().w_full().overflow_hidden().child(
-            v_resizable("resizable", self.resize_state.clone())
-                .child(
-                    resizable_panel()
-                        .size(px(400.))
-                        .size_range(px(200.)..px(800.))
-                        .child(self.editor.clone()),
-                )
-                .child(
-                    resizable_panel()
-                        .size(px(200.))
-                        .child(self.results_panel.clone()),
-                ),
-        );
+        let main = div()
+            .id("disconnected-main")
+            .flex()
+            .flex_col()
+            .w_full()
+            .p_4()
+            .child(self.connection_form.clone());
 
         let content = div()
-            .id("workspace-content")
+            .id("disconnected-content")
             .flex()
             .flex_grow()
             .bg(cx.theme().background)
             .child(sidebar)
             .child(main);
+
+        content
+    }
+
+    fn render_connected(&mut self, cx: &mut Context<Self>) -> Stateful<Div> {
+        let sidebar = div()
+            .id("connected-sidebar")
+            .flex()
+            .h_full()
+            .border_color(cx.theme().border)
+            .border_r_1()
+            .min_w(px(300.0))
+            .child(self.tables_panel.clone());
+
+        let main = div()
+            .id("connected-main")
+            .flex()
+            .flex_col()
+            .w_full()
+            .overflow_hidden()
+            .child(
+                v_resizable("resizable", self.resize_state.clone())
+                    .child(
+                        resizable_panel()
+                            .size(px(400.))
+                            .size_range(px(200.)..px(800.))
+                            .child(self.editor.clone()),
+                    )
+                    .child(
+                        resizable_panel()
+                            .size(px(200.))
+                            .child(self.results_panel.clone()),
+                    ),
+            );
+
+        let content = div()
+            .id("connected-content")
+            .flex()
+            .flex_grow()
+            .bg(cx.theme().background)
+            .when(self.show_tables.clone(), |d| d.child(sidebar))
+            .child(main);
+
+        content
+    }
+
+    fn render_connecting(&mut self, cx: &mut Context<Self>) -> Stateful<Div> {
+        let content = div()
+            .id("connecting-content")
+            .flex()
+            .flex_grow()
+            .bg(cx.theme().background)
+            .justify_center()
+            .items_center()
+            .child(Indicator::new());
+
+        content
+    }
+}
+
+impl Render for Workspace {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let content = match self.connection_state.clone() {
+            ConnectionStatus::Disconnected => self.render_disconnected(cx),
+            ConnectionStatus::Connected => self.render_connected(cx),
+            ConnectionStatus::Connecting => self.render_connecting(cx),
+        };
 
         div()
             .flex()

@@ -1,10 +1,13 @@
 use std::time::Duration;
 
-use crate::services::SqlQueryAnalyzer;
-use gpui::*;
+use crate::{
+    services::{ConnectionInfo, SqlQueryAnalyzer},
+    state::{ConnectionState, EditorState},
+};
+use gpui::{prelude::FluentBuilder as _, *};
 use gpui_component::{
-    Disableable as _, Icon, Sizable as _,
-    button::Button,
+    ActiveTheme as _, Disableable as _, Icon, Sizable as _,
+    button::{Button, ButtonVariants as _},
     h_flex,
     input::{InputEvent, InputState, TabSize, TextInput},
     v_flex,
@@ -18,6 +21,7 @@ pub enum EditorEvent {
 impl EventEmitter<EditorEvent> for Editor {}
 
 pub struct Editor {
+    active_connection: Option<ConnectionInfo>,
     input_state: Entity<InputState>,
     _subscribes: Vec<Subscription>,
     sql_analyzer: SqlQueryAnalyzer,
@@ -46,6 +50,11 @@ impl Editor {
         let sql_analyzer = SqlQueryAnalyzer::new();
 
         let _subscribes = vec![
+            cx.observe_global::<ConnectionState>(move |this, cx| {
+                let state = cx.global::<ConnectionState>();
+                this.active_connection = state.active_connection.clone();
+                cx.notify();
+            }),
             cx.subscribe(&input_state, |_, _, _: &InputEvent, cx| {
                 cx.notify();
             }),
@@ -63,6 +72,10 @@ impl Editor {
                             let text = input_state.read(cx).value().clone();
                             let queries = this.sql_analyzer.detect_queries(&text);
                             println!("Queries: {:?}", queries);
+
+                            cx.update_global::<EditorState, _>(|state, _cx| {
+                                state.sql_queries = queries;
+                            });
                         });
                     }));
                 },
@@ -72,6 +85,7 @@ impl Editor {
         Self {
             input_state,
             sql_analyzer,
+            active_connection: None,
             is_executing: false,
             is_formatting: false,
             debounce_task: None,
@@ -114,34 +128,62 @@ impl Editor {
 impl Render for Editor {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let execute_button = Button::new("execute-query")
-            .label(if self.is_executing {
+            .tooltip(if self.is_executing {
                 "Executing..."
             } else {
                 "Execute"
             })
             .icon(Icon::empty().path("icons/play.svg"))
             .small()
-            .outline()
+            .primary()
+            .ghost()
             .disabled(self.is_executing)
             .on_click(cx.listener(Self::execute_query));
 
         let format_button = Button::new("execute-format")
-            .label(if self.is_formatting {
+            .tooltip(if self.is_formatting {
                 "Formatting..."
             } else {
                 "Format"
             })
             .icon(Icon::empty().path("icons/brush-cleaning.svg"))
             .small()
-            .outline()
+            .primary()
+            .ghost()
             .disabled(self.is_formatting)
             .on_click(cx.listener(Self::format_query));
 
+        let connection_name = self.active_connection.clone().map(|x| x.name);
+        let disconnect_button = Button::new("disconnect_button")
+            .icon(Icon::empty().path("icons/plug-zap.svg"))
+            .small()
+            .danger()
+            .ghost()
+            .tooltip("Disconnect")
+            .on_click(|_evt, _win, cx| ConnectionState::disconnect(cx));
+
         let toolbar = h_flex()
             .id("editor-toolbar")
-            .justify_end()
+            .bg(cx.theme().table_head)
+            .border_b_1()
+            .border_color(cx.theme().border)
+            .justify_between()
             .items_center()
-            .pr_2()
+            .py_1()
+            .px_2()
+            .when(connection_name.is_some(), |d| {
+                d.child(
+                    div()
+                        .flex()
+                        .justify_center()
+                        .items_center()
+                        .gap_1()
+                        .text_color(cx.theme().accent_foreground)
+                        .text_xs()
+                        .child(format!("Connected to {}", connection_name.unwrap()))
+                        .child(disconnect_button),
+                )
+            })
             .child(
                 h_flex()
                     .gap_2()
@@ -150,19 +192,16 @@ impl Render for Editor {
                     .child(execute_button),
             );
 
-        v_flex()
-            .size_full()
-            .child(
-                div()
-                    .id("editor-content")
-                    .w_full()
-                    .flex_1()
-                    .p_2()
-                    .font_family("Monaco")
-                    .text_size(px(12.))
-                    .child(TextInput::new(&self.input_state).h_full()),
-            )
-            .p_2()
-            .child(toolbar)
+        v_flex().size_full().child(toolbar).child(
+            div()
+                .id("editor-content")
+                .bg(cx.theme().background)
+                .w_full()
+                .flex_1()
+                .p_2()
+                .font_family("Monaco")
+                .text_size(px(12.))
+                .child(TextInput::new(&self.input_state).h_full()),
+        )
     }
 }

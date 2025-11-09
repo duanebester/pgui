@@ -5,7 +5,7 @@ use std::process::Command;
 
 const APP_NAME: &str = "PGUI";
 const BUNDLE_ID: &str = "com.duanebester.pgui";
-const VERSION: &str = "1.0.0";
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 const EXECUTABLE_NAME: &str = "pgui";
 const SVG_FILE: &str = "assets/icons/database-zap.svg";
 

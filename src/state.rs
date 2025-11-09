@@ -84,10 +84,10 @@ impl ConnectionState {
         let app_state = cx.global::<ConnectionState>();
         let db_manager = app_state.db_manager.clone();
         cx.spawn(async move |cx| {
-            if let Ok(_) = db_manager
-                .connect(cic.to_connection_string().as_str())
-                .await
-            {
+            // Use secure connection options instead of string
+            let connect_options = cic.to_pg_connect_options();
+
+            if let Ok(_) = db_manager.connect_with_options(connect_options).await {
                 let _ = cx.update_global::<ConnectionState, _>(|state, _cx| {
                     state.active_connection = Some(cic);
                     state.connection_state = ConnectionStatus::Connected;
@@ -101,7 +101,7 @@ impl ConnectionState {
                 }
 
                 loop {
-                    let connected = db_manager.is_connected().await;
+                    let mut connected = db_manager.is_connected().await;
                     if !connected {
                         let _ = cx.update_global::<ConnectionState, _>(|state, _cx| {
                             state.active_connection = None;
@@ -109,6 +109,12 @@ impl ConnectionState {
                         });
                         break;
                     }
+
+                    let _ = cx.try_read_global::<ConnectionState, _>(|state, _cx| {
+                        if state.active_connection.is_none() {
+                            connected = false;
+                        }
+                    });
 
                     cx.background_executor()
                         .timer(Duration::from_millis(1000))

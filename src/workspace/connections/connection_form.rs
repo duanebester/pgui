@@ -121,20 +121,20 @@ impl ConnectionForm {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let _ = self
-            .name
-            .update(cx, |this, cx| this.set_value(connection.name, window, cx));
+        let _ = self.name.update(cx, |this, cx| {
+            this.set_value(connection.name.clone(), window, cx)
+        });
         let _ = self.hostname.update(cx, |this, cx| {
-            this.set_value(connection.hostname, window, cx)
+            this.set_value(connection.hostname.clone(), window, cx)
         });
         let _ = self.username.update(cx, |this, cx| {
-            this.set_value(connection.username, window, cx)
+            this.set_value(connection.username.clone(), window, cx)
         });
         let _ = self.password.update(cx, |this, cx| {
-            this.set_value(connection.password, window, cx)
+            this.set_value(connection.password.clone(), window, cx)
         });
         let _ = self.database.update(cx, |this, cx| {
-            this.set_value(connection.database, window, cx)
+            this.set_value(connection.database.clone(), window, cx)
         });
         let _ = self.port.update(cx, |this, cx| {
             this.set_value(connection.port.to_string(), window, cx)
@@ -182,12 +182,12 @@ impl ConnectionForm {
             }
         };
 
-        if port_num < 1000 {
+        if port_num < 1 {
             // TODO: Show validation error
             return None;
         }
 
-        if port_num > 66_000 {
+        if port_num > 65_535 {
             // TODO: Show validation error
             return None;
         }

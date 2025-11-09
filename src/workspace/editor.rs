@@ -153,7 +153,7 @@ impl Render for Editor {
             .disabled(self.is_formatting)
             .on_click(cx.listener(Self::format_query));
 
-        let connection_name = self.active_connection.clone().map(|x| x.name);
+        let connection_name = self.active_connection.clone().map(|x| x.name.clone());
         let disconnect_button = Button::new("disconnect_button")
             .icon(Icon::empty().path("icons/plug-zap.svg"))
             .small()

@@ -1,5 +1,6 @@
 use async_std::fs;
 use serde::{Deserialize, Serialize};
+use sqlx::postgres::PgConnectOptions;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,11 +17,14 @@ pub struct ConnectionInfo {
 }
 
 impl ConnectionInfo {
-    pub fn to_connection_string(&self) -> String {
-        format!(
-            "postgres://{}:{}@{}:{}/{}",
-            self.username, self.password, self.hostname, self.port, self.database
-        )
+    /// Secure method to create connection options without exposing password
+    pub fn to_pg_connect_options(&self) -> PgConnectOptions {
+        PgConnectOptions::new()
+            .host(&self.hostname)
+            .port(self.port as u16)
+            .username(&self.username)
+            .password(&self.password)
+            .database(&self.database)
     }
     pub fn new(
         name: String,
@@ -56,9 +60,19 @@ impl Default for ConnectionInfo {
     }
 }
 
+impl Drop for ConnectionInfo {
+    fn drop(&mut self) {
+        // Zero out password memory when dropped
+        use std::ptr;
+        unsafe {
+            ptr::write_volatile(&mut self.password, String::new());
+        }
+    }
+}
+
 pub async fn load_connections() -> Vec<ConnectionInfo> {
     let default = vec![];
-    if let Some(path) = std::env::home_dir() {
+    if let Some(path) = dirs::home_dir() {
         let project_dir = path.join(".pgui");
         let connections_file = project_dir.join("connections.json");
         if !connections_file.exists() {

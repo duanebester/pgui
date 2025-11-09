@@ -1,7 +1,10 @@
 use anyhow::Result;
 use async_std::sync::RwLock;
 use serde::{Deserialize, Serialize};
-use sqlx::{Column, PgPool, Row, TypeInfo, ValueRef, postgres::PgPoolOptions};
+use sqlx::{
+    Column, PgPool, Row, TypeInfo, ValueRef,
+    postgres::{PgConnectOptions, PgPoolOptions},
+};
 use std::{sync::Arc, time::Duration};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -110,15 +113,45 @@ impl DatabaseManager {
         }
     }
 
+    #[deprecated(since = "0.1.2", note = "Use connect_with_options() instead")]
     pub async fn connect(&self, database_url: &str) -> Result<()> {
         let pool_opts = PgPoolOptions::new()
-            .max_connections(1)
-            .acquire_timeout(Duration::from_millis(1000));
+            .max_connections(5) // Increased from 1
+            .acquire_timeout(Duration::from_secs(5)); // Increased timeout
 
         let pool = pool_opts.connect(database_url).await?;
 
         let mut pool_guard = self.pool.write().await;
         *pool_guard = Some(pool);
+        Ok(())
+    }
+
+    pub async fn connect_with_options(&self, options: PgConnectOptions) -> Result<()> {
+        let pool_opts = PgPoolOptions::new()
+            .max_connections(5) // Better than 1 for UI responsiveness
+            .acquire_timeout(Duration::from_secs(5));
+
+        let pool = pool_opts.connect_with(options).await?;
+
+        let mut pool_guard = self.pool.write().await;
+        *pool_guard = Some(pool);
+        Ok(())
+    }
+
+    pub async fn test_connection_options(options: PgConnectOptions) -> Result<()> {
+        // Create a temporary connection just for testing
+        let pool = PgPoolOptions::new()
+            .max_connections(1)
+            .acquire_timeout(Duration::from_secs(5))
+            .connect_with(options)
+            .await?;
+
+        // Test with a simple query
+        sqlx::query("SELECT 1").fetch_one(&pool).await?;
+
+        // Close the test connection
+        pool.close().await;
+
         Ok(())
     }
 

@@ -142,7 +142,7 @@ impl ConnectionState {
         let conn = connection.clone();
         cx.spawn(async move |cx| {
             if let Ok(store) = ConnectionsStore::new().await {
-                if let Ok(_) = store.delete_connection(&conn.name).await {
+                if let Ok(_) = store.delete_connection(&conn.id).await {
                     if let Ok(connections) = store.load_connections().await {
                         let _ = cx.update_global::<ConnectionState, _>(|app_state, _cx| {
                             app_state.saved_connections = connections;
@@ -157,11 +157,27 @@ impl ConnectionState {
     pub fn add_connection(connection: ConnectionInfo, cx: &mut App) {
         cx.spawn(async move |cx| {
             if let Ok(store) = ConnectionsStore::new().await {
-                if let Ok(_) = store.save_connection(&connection).await {
+                if let Ok(_) = store.create_connection(&connection).await {
                     if let Ok(connections) = store.load_connections().await {
                         let _ = cx.update_global::<ConnectionState, _>(|app_state, _cx| {
                             app_state.saved_connections = connections;
                             app_state.active_connection = None;
+                        });
+                    }
+                }
+            }
+        })
+        .detach();
+    }
+
+    pub fn update_connection(connection: ConnectionInfo, cx: &mut App) {
+        cx.spawn(async move |cx| {
+            if let Ok(store) = ConnectionsStore::new().await {
+                if let Ok(_) = store.update_connection(&connection).await {
+                    if let Ok(connections) = store.load_connections().await {
+                        let _ = cx.update_global::<ConnectionState, _>(|app_state, _cx| {
+                            app_state.saved_connections = connections;
+                            app_state.active_connection = Some(connection);
                         });
                     }
                 }

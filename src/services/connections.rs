@@ -1,11 +1,15 @@
 use async_std::fs;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectionInfo {
+    #[serde(default = "Uuid::new_v4")]
+    pub id: Uuid,
     pub name: String,
     pub hostname: String,
     pub username: String,
+    #[serde(skip_serializing_if = "String::is_empty", default)]
     pub password: String,
     pub database: String,
     pub port: usize,
@@ -18,11 +22,30 @@ impl ConnectionInfo {
             self.username, self.password, self.hostname, self.port, self.database
         )
     }
+    pub fn new(
+        name: String,
+        hostname: String,
+        username: String,
+        password: String,
+        database: String,
+        port: usize,
+    ) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            name,
+            hostname,
+            username,
+            password,
+            database,
+            port,
+        }
+    }
 }
 
 impl Default for ConnectionInfo {
     fn default() -> Self {
         Self {
+            id: Uuid::new_v4(),
             name: "Test".to_string(),
             hostname: "localhost".to_string(),
             username: "test".to_string(),
@@ -48,7 +71,15 @@ pub async fn load_connections() -> Vec<ConnectionInfo> {
         if content.trim().is_empty() {
             return default;
         }
-        serde_json::from_str(&content).unwrap_or(default)
+        // Deserialize and ensure all connections have UUIDs
+        let mut connections: Vec<ConnectionInfo> =
+            serde_json::from_str(&content).unwrap_or(default);
+        for conn in connections.iter_mut() {
+            if conn.id.is_nil() {
+                conn.id = Uuid::new_v4();
+            }
+        }
+        connections
     } else {
         default
     }

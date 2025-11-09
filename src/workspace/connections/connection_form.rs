@@ -24,6 +24,7 @@ pub struct ConnectionForm {
     database: Entity<InputState>,
     port: Entity<InputState>,
     is_editing: bool,
+    active_connection: Option<ConnectionInfo>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -69,6 +70,7 @@ impl ConnectionForm {
                         cx.global::<ConnectionState>().active_connection.clone();
                     if let Some(conn) = active_connection {
                         this.is_editing = true;
+                        this.active_connection = Some(conn.clone());
                         this.set_connection(conn, win, cx);
                         cx.notify();
                     }
@@ -83,6 +85,7 @@ impl ConnectionForm {
                 database,
                 port,
                 is_editing: false,
+                active_connection: None,
                 _subscriptions,
             }
         })
@@ -189,19 +192,38 @@ impl ConnectionForm {
             return None;
         }
 
-        Some(ConnectionInfo {
-            name: name.to_string(),
-            hostname: hostname.to_string(),
-            username: username.to_string(),
-            password: password.to_string(),
-            database: database.to_string(),
-            port: port_num,
-        })
+        if self.is_editing && self.active_connection.clone().is_some() {
+            Some(ConnectionInfo {
+                id: self.active_connection.clone().unwrap().id,
+                name: name.to_string(),
+                hostname: hostname.to_string(),
+                username: username.to_string(),
+                password: password.to_string(),
+                database: database.to_string(),
+                port: port_num,
+            })
+        } else {
+            Some(ConnectionInfo::new(
+                name.to_string(),
+                hostname.to_string(),
+                username.to_string(),
+                password.to_string(),
+                database.to_string(),
+                port_num,
+            ))
+        }
     }
 
     fn save_connection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(connection) = self.get_connection(cx) {
             ConnectionState::add_connection(connection, cx);
+            self.clear(window, cx);
+        }
+    }
+
+    fn update_connection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(connection) = self.get_connection(cx) {
+            ConnectionState::update_connection(connection, cx);
             self.clear(window, cx);
         }
     }
@@ -302,7 +324,7 @@ impl Render for ConnectionForm {
                                             .primary()
                                             .child("Update")
                                             .on_click(cx.listener(|this, _, win, cx| {
-                                                this.save_connection(win, cx)
+                                                this.update_connection(win, cx)
                                             })),
                                     )
                                     .child(

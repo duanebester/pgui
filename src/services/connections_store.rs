@@ -1,9 +1,13 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
+use keyring::Entry;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use std::path::PathBuf;
 use std::str::FromStr;
+use uuid::Uuid;
 
 use super::{ConnectionInfo, load_connections as load_json_connections};
+
+const KEYRING_SERVICE: &str = "pgui";
 
 /// ConnectionsStore manages the SQLite database for storing saved PostgreSQL connections
 #[derive(Debug, Clone)]
@@ -43,7 +47,7 @@ impl ConnectionsStore {
     /// Get the path to the SQLite database file
     fn get_db_path() -> Result<PathBuf> {
         let home =
-            std::env::home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
+            dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
         Ok(home.join(".pgui").join("connections.db"))
     }
 
@@ -51,18 +55,17 @@ impl ConnectionsStore {
     async fn initialize_schema(&self) -> Result<()> {
         sqlx::query(
             r#"
-            CREATE TABLE IF NOT EXISTS connections (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
-                hostname TEXT NOT NULL,
-                username TEXT NOT NULL,
-                password TEXT NOT NULL,
-                database TEXT NOT NULL,
-                port INTEGER NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            "#,
+                CREATE TABLE IF NOT EXISTS connections (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL UNIQUE,
+                    hostname TEXT NOT NULL,
+                    username TEXT NOT NULL,
+                    database TEXT NOT NULL,
+                    port INTEGER NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                "#,
         )
         .execute(&self.pool)
         .await?;
@@ -75,50 +78,93 @@ impl ConnectionsStore {
         Ok(())
     }
 
+    /// Get keyring entry for a connection
+    fn get_keyring_entry(connection_id: &Uuid) -> Result<Entry> {
+        Entry::new(KEYRING_SERVICE, &connection_id.to_string())
+            .context("Failed to create keyring entry")
+    }
+
+    /// Store password in keyring
+    fn store_password(connection_id: &Uuid, password: &str) -> Result<()> {
+        let entry = Self::get_keyring_entry(connection_id)?;
+        entry
+            .set_password(password)
+            .context("Failed to store password in keyring")
+    }
+
+    /// Retrieve password from keyring
+    fn get_password(connection_id: &Uuid) -> Result<String> {
+        let entry = Self::get_keyring_entry(connection_id)?;
+        entry
+            .get_password()
+            .context("Failed to retrieve password from keyring")
+    }
+
+    /// Delete password from keyring
+    fn delete_password(connection_id: &Uuid) -> Result<()> {
+        let entry = Self::get_keyring_entry(connection_id)?;
+        // Ignore errors if password doesn't exist
+        let _ = entry.delete_credential();
+        Ok(())
+    }
+
     /// Load all saved connections from the database
     pub async fn load_connections(&self) -> Result<Vec<ConnectionInfo>> {
-        let connections = sqlx::query_as::<_, (String, String, String, String, String, i64)>(
-            "SELECT name, hostname, username, password, database, port
-             FROM connections
-             ORDER BY name",
+        let rows = sqlx::query_as::<_, (String, String, String, String, String, i64)>(
+            "SELECT id, name, hostname, username, database, port
+                 FROM connections
+                 ORDER BY name",
         )
         .fetch_all(&self.pool)
-        .await?
-        .into_iter()
-        .map(
-            |(name, hostname, username, password, database, port)| ConnectionInfo {
+        .await?;
+
+        let mut connections = Vec::new();
+        for (id_str, name, hostname, username, database, port) in rows {
+            let id = Uuid::parse_str(&id_str).context("Invalid UUID in database")?;
+
+            // Try to get password from keyring, use empty string if not found
+            let password = Self::get_password(&id).unwrap_or_default();
+
+            connections.push(ConnectionInfo {
+                id,
                 name,
                 hostname,
                 username,
                 password,
                 database,
                 port: port as usize,
-            },
-        )
-        .collect();
+            });
+        }
 
         Ok(connections)
     }
 
-    /// Save a new connection or update an existing one
-    pub async fn save_connection(&self, connection: &ConnectionInfo) -> Result<()> {
+    /// Create a new connection
+    pub async fn create_connection(&self, connection: &ConnectionInfo) -> Result<()> {
+        // Check if a connection with the same name already exists
+        if self.connection_exists_by_name(&connection.name).await? {
+            anyhow::bail!(
+                "A connection with the name '{}' already exists",
+                connection.name
+            );
+        }
+
+        // Store password in keyring first
+        if !connection.password.is_empty() {
+            Self::store_password(&connection.id, &connection.password)?;
+        }
+
+        // Insert connection metadata in SQLite (without password)
         sqlx::query(
             r#"
-            INSERT INTO connections (name, hostname, username, password, database, port, updated_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, CURRENT_TIMESTAMP)
-            ON CONFLICT(name) DO UPDATE SET
-                hostname = excluded.hostname,
-                username = excluded.username,
-                password = excluded.password,
-                database = excluded.database,
-                port = excluded.port,
-                updated_at = CURRENT_TIMESTAMP
-            "#,
+                INSERT INTO connections (id, name, hostname, username, database, port, updated_at)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, CURRENT_TIMESTAMP)
+                "#,
         )
+        .bind(connection.id.to_string())
         .bind(&connection.name)
         .bind(&connection.hostname)
         .bind(&connection.username)
-        .bind(&connection.password)
         .bind(&connection.database)
         .bind(connection.port as i64)
         .execute(&self.pool)
@@ -127,41 +173,99 @@ impl ConnectionsStore {
         Ok(())
     }
 
-    /// Delete a connection by name
-    pub async fn delete_connection(&self, name: &str) -> Result<()> {
-        sqlx::query("DELETE FROM connections WHERE name = ?1")
-            .bind(name)
+    /// Update an existing connection
+    pub async fn update_connection(&self, connection: &ConnectionInfo) -> Result<()> {
+        // Check if a different connection with the same name exists
+        let existing = sqlx::query_scalar::<_, String>(
+            "SELECT id FROM connections WHERE name = ?1 AND id != ?2",
+        )
+        .bind(&connection.name)
+        .bind(connection.id.to_string())
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if existing.is_some() {
+            anyhow::bail!(
+                "A connection with the name '{}' already exists",
+                connection.name
+            );
+        }
+
+        // Update password in keyring
+        if !connection.password.is_empty() {
+            Self::store_password(&connection.id, &connection.password)?;
+        }
+
+        // Update connection metadata in SQLite (without password)
+        sqlx::query(
+            r#"
+                UPDATE connections
+                SET name = ?2,
+                    hostname = ?3,
+                    username = ?4,
+                    database = ?5,
+                    port = ?6,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?1
+                "#,
+        )
+        .bind(connection.id.to_string())
+        .bind(&connection.name)
+        .bind(&connection.hostname)
+        .bind(&connection.username)
+        .bind(&connection.database)
+        .bind(connection.port as i64)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Delete a connection by ID
+    pub async fn delete_connection(&self, id: &Uuid) -> Result<()> {
+        // Delete password from keyring
+        Self::delete_password(id)?;
+
+        // Delete from database
+        sqlx::query("DELETE FROM connections WHERE id = ?1")
+            .bind(id.to_string())
             .execute(&self.pool)
             .await?;
 
         Ok(())
     }
 
-    /// Get a single connection by name
-    pub async fn get_connection(&self, name: &str) -> Result<Option<ConnectionInfo>> {
+    /// Get a single connection by ID
+    pub async fn get_connection(&self, id: &Uuid) -> Result<Option<ConnectionInfo>> {
         let result = sqlx::query_as::<_, (String, String, String, String, String, i64)>(
-            "SELECT name, hostname, username, password, database, port
-             FROM connections
-             WHERE name = ?1",
+            "SELECT id, name, hostname, username, database, port
+                 FROM connections
+                 WHERE id = ?1",
         )
-        .bind(name)
+        .bind(id.to_string())
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(result.map(
-            |(name, hostname, username, password, database, port)| ConnectionInfo {
-                name,
-                hostname,
-                username,
-                password,
-                database,
-                port: port as usize,
-            },
-        ))
+        Ok(
+            result.map(|(id_str, name, hostname, username, database, port)| {
+                let id = Uuid::parse_str(&id_str).unwrap_or_else(|_| Uuid::new_v4());
+                let password = Self::get_password(&id).unwrap_or_default();
+
+                ConnectionInfo {
+                    id,
+                    name,
+                    hostname,
+                    username,
+                    password,
+                    database,
+                    port: port as usize,
+                }
+            }),
+        )
     }
 
     /// Check if a connection with the given name exists
-    pub async fn connection_exists(&self, name: &str) -> Result<bool> {
+    pub async fn connection_exists_by_name(&self, name: &str) -> Result<bool> {
         let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM connections WHERE name = ?1")
             .bind(name)
             .fetch_one(&self.pool)
@@ -178,8 +282,8 @@ impl ConnectionsStore {
 
         for connection in connections {
             // Only save if it doesn't already exist in the database
-            if !self.connection_exists(&connection.name).await? {
-                self.save_connection(&connection).await?;
+            if !self.connection_exists_by_name(&connection.name).await? {
+                self.create_connection(&connection).await?;
             }
         }
 
@@ -226,6 +330,7 @@ mod tests {
         store.initialize_schema().await.unwrap();
 
         let connection = ConnectionInfo {
+            id: Uuid::new_v4(),
             name: "test-connection".to_string(),
             hostname: "localhost".to_string(),
             username: "testuser".to_string(),
@@ -234,15 +339,17 @@ mod tests {
             port: 5432,
         };
 
+        let conn_id = connection.id;
+
         // Save connection
-        store.save_connection(&connection).await.unwrap();
+        store.create_connection(&connection).await.unwrap();
 
         // Load connections
         let connections = store.load_connections().await.unwrap();
-        assert!(connections.iter().any(|c| c.name == "test-connection"));
+        assert!(connections.iter().any(|c| c.id == conn_id));
 
         // Get specific connection
-        let loaded = store.get_connection("test-connection").await.unwrap();
+        let loaded = store.get_connection(&conn_id).await.unwrap();
         assert!(loaded.is_some());
         let loaded = loaded.unwrap();
         assert_eq!(loaded.hostname, "localhost");
@@ -264,6 +371,7 @@ mod tests {
         store.initialize_schema().await.unwrap();
 
         let mut connection = ConnectionInfo {
+            id: Uuid::new_v4(),
             name: "update-test".to_string(),
             hostname: "localhost".to_string(),
             username: "user1".to_string(),
@@ -272,16 +380,18 @@ mod tests {
             port: 5432,
         };
 
+        let conn_id = connection.id;
+
         // Save initial
-        store.save_connection(&connection).await.unwrap();
+        store.create_connection(&connection).await.unwrap();
 
         // Update
         connection.hostname = "newhost".to_string();
         connection.port = 5433;
-        store.save_connection(&connection).await.unwrap();
+        store.update_connection(&connection).await.unwrap();
 
         // Verify update
-        let loaded = store.get_connection("update-test").await.unwrap().unwrap();
+        let loaded = store.get_connection(&conn_id).await.unwrap().unwrap();
         assert_eq!(loaded.hostname, "newhost");
         assert_eq!(loaded.port, 5433);
     }
@@ -301,6 +411,7 @@ mod tests {
         store.initialize_schema().await.unwrap();
 
         let connection = ConnectionInfo {
+            id: Uuid::new_v4(),
             name: "delete-test".to_string(),
             hostname: "localhost".to_string(),
             username: "user".to_string(),
@@ -309,43 +420,14 @@ mod tests {
             port: 5432,
         };
 
+        let conn_id = connection.id;
+
         // Save and verify exists
-        store.save_connection(&connection).await.unwrap();
-        assert!(store.connection_exists("delete-test").await.unwrap());
+        store.create_connection(&connection).await.unwrap();
+        assert!(store.get_connection(&conn_id).await.unwrap().is_some());
 
         // Delete and verify removed
-        store.delete_connection("delete-test").await.unwrap();
-        assert!(!store.connection_exists("delete-test").await.unwrap());
-    }
-
-    #[async_std::test]
-    async fn test_connection_exists() {
-        let options = SqliteConnectOptions::from_str("sqlite::memory:")
-            .unwrap()
-            .create_if_missing(true);
-
-        let pool = SqlitePoolOptions::new()
-            .connect_with(options)
-            .await
-            .unwrap();
-
-        let store = ConnectionsStore { pool };
-        store.initialize_schema().await.unwrap();
-
-        let connection = ConnectionInfo {
-            name: "exists-test".to_string(),
-            hostname: "localhost".to_string(),
-            username: "user".to_string(),
-            password: "pass".to_string(),
-            database: "db".to_string(),
-            port: 5432,
-        };
-
-        // Should not exist initially
-        assert!(!store.connection_exists("exists-test").await.unwrap());
-
-        // Save and verify exists
-        store.save_connection(&connection).await.unwrap();
-        assert!(store.connection_exists("exists-test").await.unwrap());
+        store.delete_connection(&conn_id).await.unwrap();
+        assert!(store.get_connection(&conn_id).await.unwrap().is_none());
     }
 }

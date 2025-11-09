@@ -13,10 +13,12 @@ anyhow = "1.0"
 async-channel = "2.3"
 async-std = { version = "1", features = ["attributes"] }
 chrono = "0.4"
+dirs = "6.0.0"
 futures = "0.3"
 gpui = "0.2"
 gpui-component = { version = "0.3", features = ["tree-sitter-languages"] }
 hex = "0.4"
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 rust-embed = "8.2.0"
 rust_decimal = "1.37.1"
 serde = { version = "1", features = ["derive"] }
@@ -26,6 +28,7 @@ sqlx = { version = "0.8", features = [ "runtime-async-std", "tls-native-tls", "p
 tree-sitter = "0.25.6"
 tree-sitter-sequel = "0.3.8"
 url = "2.5"
+uuid = { version = "1", features = ["v4", "serde"] }
 
 [dev-dependencies]
 tempfile = "3"

@@ -20,9 +20,7 @@ jobs:
         components: clippy
     - uses: ConorMacBride/install-package@v1
       with:
-        apt: libdbus-1-dev pkg-config gcc g++ clang libfontconfig-dev libwayland-dev \
-              libxkbcommon-x11-dev libx11-xcb-dev \
-              libzstd-dev
+        apt: libdbus-1-dev pkg-config gcc g++ clang libfontconfig-dev
     - uses: actions/checkout@v4
     - name: Build
       run: cargo build --verbose

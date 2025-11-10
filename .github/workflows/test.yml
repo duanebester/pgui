@@ -21,9 +21,8 @@ jobs:
     - uses: ConorMacBride/install-package@v1
       with:
         apt: libdbus-1-dev pkg-config gcc g++ clang libfontconfig-dev libwayland-dev \
-              libwebkit2gtk-4.1-dev libxkbcommon-x11-dev libx11-xcb-dev \
-              libssl-dev libzstd-dev \
-              vulkan-validationlayers libvulkan1
+              libxkbcommon-x11-dev libx11-xcb-dev \
+              libzstd-dev
     - uses: actions/checkout@v4
     - name: Build
       run: cargo build --verbose

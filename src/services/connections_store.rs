@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use uuid::Uuid;
 
-use super::{ConnectionInfo, load_connections as load_json_connections};
+use super::{ConnectionInfo, SslMode, load_connections as load_json_connections};
 
 const KEYRING_SERVICE: &str = "pgui";
 
@@ -41,6 +41,7 @@ impl ConnectionsStore {
 
         let store = Self { pool };
         store.initialize_schema().await?;
+        store.migrate_schema().await?;
         Ok(store)
     }
 
@@ -62,6 +63,7 @@ impl ConnectionsStore {
                     username TEXT NOT NULL,
                     database TEXT NOT NULL,
                     port INTEGER NOT NULL,
+                    ssl_mode TEXT NOT NULL DEFAULT 'prefer',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -74,6 +76,39 @@ impl ConnectionsStore {
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_connections_name ON connections(name)")
             .execute(&self.pool)
             .await?;
+
+        Ok(())
+    }
+
+    /// Migrate schema for existing databases
+    async fn migrate_schema(&self) -> Result<()> {
+        // Try to check if ssl_mode column exists by querying a single row
+        let has_ssl_mode = sqlx::query("SELECT ssl_mode FROM connections LIMIT 1")
+            .fetch_optional(&self.pool)
+            .await
+            .is_ok();
+
+        if !has_ssl_mode {
+            println!("Migration: ssl_mode column not found, adding it...");
+
+            // Add ssl_mode column with default value
+            match sqlx::query(
+                "ALTER TABLE connections ADD COLUMN ssl_mode TEXT NOT NULL DEFAULT 'prefer'",
+            )
+            .execute(&self.pool)
+            .await
+            {
+                Ok(_) => {
+                    println!("Migration: Successfully added ssl_mode column");
+                }
+                Err(e) => {
+                    // If column already exists, SQLite will error - that's okay
+                    println!("Migration: Column may already exist: {}", e);
+                }
+            }
+        } else {
+            println!("Migration: ssl_mode column already exists");
+        }
 
         Ok(())
     }
@@ -108,10 +143,33 @@ impl ConnectionsStore {
         Ok(())
     }
 
+    /// Parse SSL mode string from database
+    fn parse_ssl_mode(ssl_mode_str: &str) -> SslMode {
+        match ssl_mode_str {
+            "disable" => SslMode::Disable,
+            "prefer" => SslMode::Prefer,
+            "require" => SslMode::Require,
+            "verify-ca" => SslMode::VerifyCa,
+            "verify-full" => SslMode::VerifyFull,
+            _ => SslMode::Prefer, // Default fallback
+        }
+    }
+
+    /// Convert SSL mode to database string
+    fn ssl_mode_to_string(ssl_mode: &SslMode) -> &'static str {
+        match ssl_mode {
+            SslMode::Disable => "disable",
+            SslMode::Prefer => "prefer",
+            SslMode::Require => "require",
+            SslMode::VerifyCa => "verify-ca",
+            SslMode::VerifyFull => "verify-full",
+        }
+    }
+
     /// Load all saved connections from the database
     pub async fn load_connections(&self) -> Result<Vec<ConnectionInfo>> {
-        let rows = sqlx::query_as::<_, (String, String, String, String, String, i64)>(
-            "SELECT id, name, hostname, username, database, port
+        let rows = sqlx::query_as::<_, (String, String, String, String, String, i64, String)>(
+            "SELECT id, name, hostname, username, database, port, ssl_mode
                  FROM connections
                  ORDER BY name",
         )
@@ -119,7 +177,7 @@ impl ConnectionsStore {
         .await?;
 
         let mut connections = Vec::new();
-        for (id_str, name, hostname, username, database, port) in rows {
+        for (id_str, name, hostname, username, database, port, ssl_mode_str) in rows {
             let id = Uuid::parse_str(&id_str).context("Invalid UUID in database")?;
 
             // Try to get password from keyring, use empty string if not found
@@ -133,6 +191,7 @@ impl ConnectionsStore {
                 password,
                 database,
                 port: port as usize,
+                ssl_mode: Self::parse_ssl_mode(&ssl_mode_str),
             });
         }
 
@@ -157,8 +216,8 @@ impl ConnectionsStore {
         // Insert connection metadata in SQLite (without password)
         sqlx::query(
             r#"
-                INSERT INTO connections (id, name, hostname, username, database, port, updated_at)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, CURRENT_TIMESTAMP)
+                INSERT INTO connections (id, name, hostname, username, database, port, ssl_mode, updated_at)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, CURRENT_TIMESTAMP)
                 "#,
         )
         .bind(connection.id.to_string())
@@ -167,6 +226,7 @@ impl ConnectionsStore {
         .bind(&connection.username)
         .bind(&connection.database)
         .bind(connection.port as i64)
+        .bind(Self::ssl_mode_to_string(&connection.ssl_mode))
         .execute(&self.pool)
         .await?;
 
@@ -205,6 +265,7 @@ impl ConnectionsStore {
                     username = ?4,
                     database = ?5,
                     port = ?6,
+                    ssl_mode = ?7,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?1
                 "#,
@@ -215,6 +276,7 @@ impl ConnectionsStore {
         .bind(&connection.username)
         .bind(&connection.database)
         .bind(connection.port as i64)
+        .bind(Self::ssl_mode_to_string(&connection.ssl_mode))
         .execute(&self.pool)
         .await?;
 
@@ -237,8 +299,8 @@ impl ConnectionsStore {
 
     /// Get a single connection by ID
     pub async fn get_connection(&self, id: &Uuid) -> Result<Option<ConnectionInfo>> {
-        let result = sqlx::query_as::<_, (String, String, String, String, String, i64)>(
-            "SELECT id, name, hostname, username, database, port
+        let result = sqlx::query_as::<_, (String, String, String, String, String, i64, String)>(
+            "SELECT id, name, hostname, username, database, port, ssl_mode
                  FROM connections
                  WHERE id = ?1",
         )
@@ -246,8 +308,8 @@ impl ConnectionsStore {
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(
-            result.map(|(id_str, name, hostname, username, database, port)| {
+        Ok(result.map(
+            |(id_str, name, hostname, username, database, port, ssl_mode_str)| {
                 let id = Uuid::parse_str(&id_str).unwrap_or_else(|_| Uuid::new_v4());
                 let password = Self::get_password(&id).unwrap_or_default();
 
@@ -259,9 +321,10 @@ impl ConnectionsStore {
                     password,
                     database,
                     port: port as usize,
+                    ssl_mode: Self::parse_ssl_mode(&ssl_mode_str),
                 }
-            }),
-        )
+            },
+        ))
     }
 
     /// Check if a connection with the given name exists
@@ -337,6 +400,7 @@ mod tests {
             password: "testpass".to_string(),
             database: "testdb".to_string(),
             port: 5432,
+            ssl_mode: SslMode::Prefer,
         };
 
         let conn_id = connection.id;
@@ -354,6 +418,7 @@ mod tests {
         let loaded = loaded.unwrap();
         assert_eq!(loaded.hostname, "localhost");
         assert_eq!(loaded.port, 5432);
+        assert_eq!(loaded.ssl_mode, SslMode::Prefer);
     }
 
     #[async_std::test]
@@ -378,6 +443,7 @@ mod tests {
             password: "pass1".to_string(),
             database: "db1".to_string(),
             port: 5432,
+            ssl_mode: SslMode::Disable,
         };
 
         let conn_id = connection.id;
@@ -388,12 +454,14 @@ mod tests {
         // Update
         connection.hostname = "newhost".to_string();
         connection.port = 5433;
+        connection.ssl_mode = SslMode::Require;
         store.update_connection(&connection).await.unwrap();
 
         // Verify update
         let loaded = store.get_connection(&conn_id).await.unwrap().unwrap();
         assert_eq!(loaded.hostname, "newhost");
         assert_eq!(loaded.port, 5433);
+        assert_eq!(loaded.ssl_mode, SslMode::Require);
     }
 
     #[async_std::test]
@@ -418,6 +486,7 @@ mod tests {
             password: "pass".to_string(),
             database: "db".to_string(),
             port: 5432,
+            ssl_mode: SslMode::Prefer,
         };
 
         let conn_id = connection.id;

@@ -6,7 +6,10 @@ use gpui_component::{
     *,
 };
 
-use crate::{services::ConnectionInfo, state::ConnectionState};
+use crate::{
+    services::{ConnectionInfo, SslMode},
+    state::ConnectionState,
+};
 
 #[allow(dead_code)]
 pub enum ConnectionSavedEvent {
@@ -201,6 +204,7 @@ impl ConnectionForm {
                 password: password.to_string(),
                 database: database.to_string(),
                 port: port_num,
+                ssl_mode: SslMode::Prefer,
             })
         } else {
             Some(ConnectionInfo::new(
@@ -210,6 +214,7 @@ impl ConnectionForm {
                 password.to_string(),
                 database.to_string(),
                 port_num,
+                SslMode::Prefer,
             ))
         }
     }

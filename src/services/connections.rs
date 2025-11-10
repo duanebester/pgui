@@ -1,7 +1,106 @@
 use async_std::fs;
+use gpui::SharedString;
+use gpui_component::dropdown::DropdownItem;
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::PgConnectOptions;
+use sqlx::postgres::{PgConnectOptions, PgSslMode};
 use uuid::Uuid;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum SslMode {
+    Disable,
+    Prefer,
+    Require,
+    VerifyCa,
+    VerifyFull,
+}
+
+impl DropdownItem for SslMode {
+    type Value = &'static str;
+
+    fn title(&self) -> SharedString {
+        self.as_str().into()
+    }
+
+    fn value(&self) -> &Self::Value {
+        match self {
+            SslMode::Disable => &"disable",
+            SslMode::Prefer => &"prefer",
+            SslMode::Require => &"require",
+            SslMode::VerifyCa => &"verify-ca",
+            SslMode::VerifyFull => &"verify-full",
+        }
+    }
+}
+
+impl Default for SslMode {
+    fn default() -> Self {
+        SslMode::Prefer
+    }
+}
+
+#[allow(dead_code)]
+impl SslMode {
+    pub fn to_pg_ssl_mode(&self) -> PgSslMode {
+        match self {
+            SslMode::Disable => PgSslMode::Disable,
+            SslMode::Prefer => PgSslMode::Prefer,
+            SslMode::Require => PgSslMode::Require,
+            SslMode::VerifyCa => PgSslMode::VerifyCa,
+            SslMode::VerifyFull => PgSslMode::VerifyFull,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SslMode::Disable => "Disable",
+            SslMode::Prefer => "Prefer",
+            SslMode::Require => "Require",
+            SslMode::VerifyCa => "Verify CA",
+            SslMode::VerifyFull => "Verify Full",
+        }
+    }
+
+    pub fn description(&self) -> &str {
+        match self {
+            SslMode::Disable => "No SSL connection",
+            SslMode::Prefer => "Try SSL first, fall back to non-SSL",
+            SslMode::Require => "Require SSL, don't verify certificates",
+            SslMode::VerifyCa => "Require SSL and verify server certificate",
+            SslMode::VerifyFull => "Require SSL, verify certificate and hostname",
+        }
+    }
+
+    pub fn all() -> Vec<SslMode> {
+        vec![
+            SslMode::Disable,
+            SslMode::Prefer,
+            SslMode::Require,
+            SslMode::VerifyCa,
+            SslMode::VerifyFull,
+        ]
+    }
+
+    pub fn from_index(index: usize) -> Self {
+        match index {
+            0 => SslMode::Disable,
+            1 => SslMode::Prefer,
+            2 => SslMode::Require,
+            3 => SslMode::VerifyCa,
+            4 => SslMode::VerifyFull,
+            _ => SslMode::Prefer,
+        }
+    }
+
+    pub fn to_index(&self) -> usize {
+        match self {
+            SslMode::Disable => 0,
+            SslMode::Prefer => 1,
+            SslMode::Require => 2,
+            SslMode::VerifyCa => 3,
+            SslMode::VerifyFull => 4,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectionInfo {
@@ -14,6 +113,8 @@ pub struct ConnectionInfo {
     pub password: String,
     pub database: String,
     pub port: usize,
+    #[serde(default)]
+    pub ssl_mode: SslMode,
 }
 
 impl ConnectionInfo {
@@ -25,7 +126,9 @@ impl ConnectionInfo {
             .username(&self.username)
             .password(&self.password)
             .database(&self.database)
+            .ssl_mode(self.ssl_mode.to_pg_ssl_mode())
     }
+
     pub fn new(
         name: String,
         hostname: String,
@@ -33,6 +136,7 @@ impl ConnectionInfo {
         password: String,
         database: String,
         port: usize,
+        ssl_mode: SslMode,
     ) -> Self {
         Self {
             id: Uuid::new_v4(),
@@ -42,6 +146,7 @@ impl ConnectionInfo {
             password,
             database,
             port,
+            ssl_mode,
         }
     }
 }
@@ -56,6 +161,7 @@ impl Default for ConnectionInfo {
             password: "test".to_string(),
             database: "test".to_string(),
             port: 5432,
+            ssl_mode: SslMode::default(),
         }
     }
 }

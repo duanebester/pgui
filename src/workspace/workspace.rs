@@ -1,4 +1,4 @@
-use super::connections::ConnectionsPanel;
+use super::connections::ConnectionManager;
 use super::editor::EditorEvent;
 use super::footer_bar::{FooterBar, FooterBarEvent};
 use super::header_bar::HeaderBar;
@@ -7,7 +7,6 @@ use super::{editor::Editor, results_panel::ResultsPanel};
 
 use crate::services::{QueryExecutionResult, TableInfo};
 use crate::state::{ConnectionState, ConnectionStatus};
-use crate::workspace::connections::ConnectionForm;
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 
@@ -20,10 +19,9 @@ pub struct Workspace {
     resize_state: Entity<ResizableState>,
     header_bar: Entity<HeaderBar>,
     footer_bar: Entity<FooterBar>,
-    connections_panel: Entity<ConnectionsPanel>,
-    connection_form: Entity<ConnectionForm>,
     tables_panel: Entity<TablesPanel>,
     editor: Entity<Editor>,
+    connection_manager: Entity<ConnectionManager>,
     results_panel: Entity<ResultsPanel>,
     _subscriptions: Vec<Subscription>,
     show_tables: bool,
@@ -34,11 +32,12 @@ impl Workspace {
         let header_bar = HeaderBar::view(window, cx);
         let footer_bar = FooterBar::view(window, cx);
         let resize_state = ResizableState::new(cx);
-        let connections_panel = ConnectionsPanel::view(window, cx);
-        let connection_form = ConnectionForm::view(window, cx);
+        // let connections_panel = ConnectionsPanel::view(window, cx);
+        // let connection_form = ConnectionForm::view(window, cx);
         let tables_panel = TablesPanel::view(window, cx);
         let editor = Editor::view(window, cx);
         let results_panel = ResultsPanel::view(window, cx);
+        let connection_manager = ConnectionManager::view(window, cx);
 
         let _subscriptions = vec![
             cx.observe_global::<ConnectionState>(move |this, cx| {
@@ -70,8 +69,7 @@ impl Workspace {
             resize_state,
             header_bar,
             footer_bar,
-            connections_panel,
-            connection_form,
+            connection_manager,
             tables_panel,
             editor,
             results_panel,
@@ -159,30 +157,12 @@ impl Workspace {
     }
 
     fn render_disconnected(&mut self, cx: &mut Context<Self>) -> Stateful<Div> {
-        let sidebar = div()
-            .id("disconnected-sidebar")
-            .flex()
-            .h_full()
-            .border_color(cx.theme().border)
-            .border_r_1()
-            .min_w(px(300.0))
-            .child(self.connections_panel.clone());
-
-        let main = div()
-            .id("disconnected-main")
-            .flex()
-            .flex_col()
-            .w_full()
-            .p_4()
-            .child(self.connection_form.clone());
-
         let content = div()
-            .id("disconnected-content")
+            .id("connection-manager")
             .flex()
             .flex_grow()
             .bg(cx.theme().background)
-            .child(sidebar)
-            .child(main);
+            .child(self.connection_manager.clone());
 
         content
     }
@@ -229,15 +209,22 @@ impl Workspace {
         content
     }
 
-    fn render_connecting(&mut self, cx: &mut Context<Self>) -> Stateful<Div> {
+    fn render_loading(&mut self, cx: &mut Context<Self>) -> Stateful<Div> {
         let content = div()
-            .id("connecting-content")
+            .id("loading-content")
             .flex()
             .flex_grow()
             .bg(cx.theme().background)
             .justify_center()
             .items_center()
-            .child(Indicator::new());
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .child(Indicator::new())
+                    .child("Loading"),
+            );
 
         content
     }
@@ -248,7 +235,8 @@ impl Render for Workspace {
         let content = match self.connection_state.clone() {
             ConnectionStatus::Disconnected => self.render_disconnected(cx),
             ConnectionStatus::Connected => self.render_connected(cx),
-            ConnectionStatus::Connecting => self.render_connecting(cx),
+            ConnectionStatus::Disconnecting => self.render_loading(cx),
+            ConnectionStatus::Connecting => self.render_loading(cx),
         };
 
         div()

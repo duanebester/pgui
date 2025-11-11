@@ -26,13 +26,15 @@ pub struct ConnectionForm {
     password: Entity<InputState>,
     database: Entity<InputState>,
     port: Entity<InputState>,
-    is_editing: bool,
     active_connection: Option<ConnectionInfo>,
-    _subscriptions: Vec<Subscription>,
 }
 
 impl ConnectionForm {
-    pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
+    pub fn view(
+        connection: Option<ConnectionInfo>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Entity<Self> {
         cx.new(|cx| {
             let name = cx.new(|cx| {
                 InputState::new(window, cx)
@@ -66,20 +68,6 @@ impl ConnectionForm {
                     .clean_on_escape()
             });
 
-            let _subscriptions = vec![cx.observe_global_in::<ConnectionState>(
-                window,
-                |this: &mut ConnectionForm, win, cx| {
-                    let active_connection =
-                        cx.global::<ConnectionState>().active_connection.clone();
-                    if let Some(conn) = active_connection {
-                        this.is_editing = true;
-                        this.active_connection = Some(conn.clone());
-                        this.set_connection(conn, win, cx);
-                        cx.notify();
-                    }
-                },
-            )];
-
             ConnectionForm {
                 name,
                 hostname,
@@ -87,14 +75,12 @@ impl ConnectionForm {
                 password,
                 database,
                 port,
-                is_editing: false,
-                active_connection: None,
-                _subscriptions,
+                active_connection: connection,
             }
         })
     }
 
-    fn clear(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn clear(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let _ = self
             .name
             .update(cx, |this, cx| this.set_value("", window, cx));
@@ -114,11 +100,12 @@ impl ConnectionForm {
             .port
             .update(cx, |this, cx| this.set_value("", window, cx));
 
-        self.is_editing = false;
+        self.active_connection = None;
+
         cx.notify();
     }
 
-    fn set_connection(
+    pub fn set_connection(
         &mut self,
         connection: ConnectionInfo,
         window: &mut Window,
@@ -142,6 +129,7 @@ impl ConnectionForm {
         let _ = self.port.update(cx, |this, cx| {
             this.set_value(connection.port.to_string(), window, cx)
         });
+        self.active_connection = Some(connection.clone());
         cx.notify();
     }
 
@@ -195,7 +183,7 @@ impl ConnectionForm {
             return None;
         }
 
-        if self.is_editing && self.active_connection.clone().is_some() {
+        if self.active_connection.clone().is_some() {
             Some(ConnectionInfo {
                 id: self.active_connection.clone().unwrap().id,
                 name: name.to_string(),
@@ -226,10 +214,9 @@ impl ConnectionForm {
         }
     }
 
-    fn update_connection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn update_connection(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         if let Some(connection) = self.get_connection(cx) {
             ConnectionState::update_connection(connection, cx);
-            self.clear(window, cx);
         }
     }
 
@@ -245,10 +232,10 @@ impl Render for ConnectionForm {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .mb_4()
-            .when(!self.is_editing, |d| {
+            .when(self.active_connection.clone().is_none(), |d| {
                 d.child(div().text_3xl().child("Add Connection"))
             })
-            .when(self.is_editing, |d| {
+            .when(self.active_connection.clone().is_some(), |d| {
                 d.child(div().text_3xl().child("Edit Connection"))
             })
             .child(
@@ -300,12 +287,7 @@ impl Render for ConnectionForm {
                             h_flex()
                                 .mt_2()
                                 .gap_2()
-                                .child(
-                                    Button::new("clear-connection").child("Clear").on_click(
-                                        cx.listener(|this, _, win, cx| this.clear(win, cx)),
-                                    ),
-                                )
-                                .when(!self.is_editing, |d| {
+                                .when(self.active_connection.clone().is_none(), |d| {
                                     d.child(
                                         Button::new("save-connection")
                                             .primary()
@@ -315,7 +297,7 @@ impl Render for ConnectionForm {
                                             })),
                                     )
                                 })
-                                .when(self.is_editing, |d| {
+                                .when(self.active_connection.clone().is_some(), |d| {
                                     d.child(
                                         Button::new("delete-connection")
                                             .child("Delete")

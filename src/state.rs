@@ -7,6 +7,7 @@ use crate::services::{ConnectionInfo, ConnectionsStore, DatabaseManager, SqlQuer
 #[derive(Clone, PartialEq)]
 pub enum ConnectionStatus {
     Disconnected,
+    Disconnecting,
     Connecting,
     Connected,
 }
@@ -70,12 +71,6 @@ impl ConnectionState {
         .detach();
     }
 
-    pub fn set_active(connection_info: &ConnectionInfo, cx: &mut App) {
-        let _ = cx.update_global::<ConnectionState, _>(|state, _cx| {
-            state.active_connection = Some(connection_info.clone());
-        });
-    }
-
     pub fn connect(connection_info: &ConnectionInfo, cx: &mut App) {
         let _ = cx.update_global::<ConnectionState, _>(|state, _cx| {
             state.connection_state = ConnectionStatus::Connecting;
@@ -129,6 +124,9 @@ impl ConnectionState {
         let app_state = cx.global::<ConnectionState>();
         let db_manager = app_state.db_manager.clone();
         cx.spawn(async move |cx| {
+            let _ = cx.update_global::<ConnectionState, _>(|state, _cx| {
+                state.connection_state = ConnectionStatus::Disconnecting;
+            });
             if let Ok(_) = db_manager.disconnect().await {
                 let _ = cx.update_global::<ConnectionState, _>(|state, _cx| {
                     // TODO: default blank state?

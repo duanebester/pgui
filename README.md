@@ -17,8 +17,8 @@ rm ~/.pgui/connections.db
 rm ~/.pgui/connections.json
 ```
 
-As of 2025-11-08:
+As of 2025-11-12:
 
-![screengrab](./assets/screenshots/2025-11-08.png)
+![screengrab](./assets/screenshots/2025-11-12.png)
 
 See [Mac App Build](./MAC_APP_BUILD.md) for building locally on MacOS

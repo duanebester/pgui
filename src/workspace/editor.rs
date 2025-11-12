@@ -1,7 +1,7 @@
-use std::time::Duration;
+use std::rc::Rc;
 
 use crate::{
-    services::{ConnectionInfo, SqlQueryAnalyzer},
+    services::{ConnectionInfo, LspStore},
     state::{ConnectionState, EditorState},
 };
 use gpui::{prelude::FluentBuilder as _, *};
@@ -9,9 +9,10 @@ use gpui_component::{
     ActiveTheme as _, Disableable as _, Icon, Sizable as _,
     button::{Button, ButtonVariants as _},
     h_flex,
-    input::{InputEvent, InputState, TabSize, TextInput},
+    input::{Input, InputState, TabSize},
     v_flex,
 };
+use lsp_types::CompletionItem;
 use sqlformat::{FormatOptions, QueryParams, format};
 
 pub enum EditorEvent {
@@ -24,30 +25,30 @@ pub struct Editor {
     active_connection: Option<ConnectionInfo>,
     input_state: Entity<InputState>,
     _subscribes: Vec<Subscription>,
-    sql_analyzer: SqlQueryAnalyzer,
+    lsp_store: LspStore,
     is_executing: bool,
     is_formatting: bool,
-    debounce_task: Option<Task<()>>,
-    debounce_duration: Duration,
 }
 
 impl Editor {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let default_language = "sql".to_string();
+        let lsp_store = LspStore::new();
+
         let input_state = cx.new(|cx| {
             let mut i = InputState::new(window, cx)
                 .code_editor(default_language)
                 .line_number(true)
+                .indent_guides(true)
                 .tab_size(TabSize {
                     tab_size: 2,
                     hard_tabs: false,
                 })
                 .placeholder("Enter your SQL query here...");
             i.set_value("SELECT * FROM products;", window, cx);
+            i.lsp.completion_provider = Some(Rc::new(lsp_store.clone()));
             i
         });
-
-        let sql_analyzer = SqlQueryAnalyzer::new();
 
         let _subscribes = vec![
             cx.observe_global::<ConnectionState>(move |this, cx| {
@@ -55,41 +56,33 @@ impl Editor {
                 this.active_connection = state.active_connection.clone();
                 cx.notify();
             }),
-            cx.subscribe(&input_state, |_, _, _: &InputEvent, cx| {
+            cx.observe_global::<EditorState>(move |this, cx| {
+                let tables = cx.global::<EditorState>().tables.clone();
+                let completions = tables
+                    .iter()
+                    .map(|table| {
+                        let table = table.clone();
+                        CompletionItem {
+                            label: table.table_name.into(),
+                            kind: Some(lsp_types::CompletionItemKind::KEYWORD),
+                            detail: Some(
+                                format!("{}:{}", table.table_schema, table.table_type).into(),
+                            ),
+                            ..Default::default()
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                this.lsp_store.add_schema_completions(completions);
                 cx.notify();
             }),
-            cx.subscribe_in(
-                &input_state,
-                window,
-                |this, input_state, _: &InputEvent, window, cx| {
-                    let input_state = input_state.clone();
-                    let duration = this.debounce_duration;
-                    // Dropping the old task automatically cancels it
-                    this.debounce_task = Some(cx.spawn_in(window, async move |editor, cx| {
-                        Timer::after(duration).await;
-
-                        _ = editor.update_in(cx, move |this, _, cx| {
-                            let text = input_state.read(cx).value().clone();
-                            let queries = this.sql_analyzer.detect_queries(&text);
-                            println!("Queries: {:?}", queries);
-
-                            cx.update_global::<EditorState, _>(|state, _cx| {
-                                state.sql_queries = queries;
-                            });
-                        });
-                    }));
-                },
-            ),
         ];
 
         Self {
             input_state,
-            sql_analyzer,
+            lsp_store,
             active_connection: None,
             is_executing: false,
             is_formatting: false,
-            debounce_task: None,
-            debounce_duration: Duration::from_millis(250),
             _subscribes,
         }
     }
@@ -201,7 +194,7 @@ impl Render for Editor {
                 .p_2()
                 .font_family("Monaco")
                 .text_size(px(12.))
-                .child(TextInput::new(&self.input_state).h_full()),
+                .child(Input::new(&self.input_state).h_full()),
         )
     }
 }

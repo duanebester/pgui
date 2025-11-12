@@ -8,7 +8,7 @@ use gpui_component::{
     button::{Button, ButtonVariants as _},
     h_flex,
     label::Label,
-    list::{List, ListDelegate, ListEvent, ListItem},
+    list::{List, ListDelegate, ListEvent, ListItem, ListState},
     v_flex,
 };
 
@@ -126,7 +126,7 @@ impl ListDelegate for TableListDelegate {
         &mut self,
         query: &str,
         _: &mut Window,
-        _: &mut Context<List<Self>>,
+        _: &mut Context<ListState<Self>>,
     ) -> Task<()> {
         self.query = query.to_string();
         self.matched_tables = if query.is_empty() {
@@ -150,7 +150,12 @@ impl ListDelegate for TableListDelegate {
         Task::ready(())
     }
 
-    fn confirm(&mut self, secondary: bool, _window: &mut Window, _cx: &mut Context<List<Self>>) {
+    fn confirm(
+        &mut self,
+        secondary: bool,
+        _window: &mut Window,
+        _cx: &mut Context<ListState<Self>>,
+    ) {
         println!("Confirmed with secondary: {}", secondary);
     }
 
@@ -158,18 +163,13 @@ impl ListDelegate for TableListDelegate {
         &mut self,
         ix: Option<IndexPath>,
         _: &mut Window,
-        cx: &mut Context<List<Self>>,
+        cx: &mut Context<ListState<Self>>,
     ) {
         self.selected_index = ix;
         cx.notify();
     }
 
-    fn render_item(
-        &self,
-        ix: IndexPath,
-        _: &mut Window,
-        _: &mut Context<List<Self>>,
-    ) -> Option<Self::Item> {
+    fn render_item(&self, ix: IndexPath, _: &mut Window, _: &mut App) -> Option<Self::Item> {
         let selected = Some(ix) == self.selected_index;
         if let Some(table) = self.matched_tables.get(ix.row) {
             return Some(TableListItem::new(ix, table.clone(), ix, selected));
@@ -185,7 +185,7 @@ impl ListDelegate for TableListDelegate {
         0
     }
 
-    fn load_more(&mut self, _window: &mut Window, _cx: &mut Context<List<Self>>) {
+    fn load_more(&mut self, _window: &mut Window, _cx: &mut Context<ListState<Self>>) {
         // No-op for tables
     }
 }
@@ -216,7 +216,7 @@ impl TableListDelegate {
 }
 
 pub struct TablesPanel {
-    table_list: Entity<List<TableListDelegate>>,
+    table_list: Entity<ListState<TableListDelegate>>,
     db_manager: Option<DatabaseManager>,
     is_connected: bool,
     _subscriptions: Vec<Subscription>,
@@ -224,7 +224,7 @@ pub struct TablesPanel {
 
 impl TablesPanel {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let table_list = cx.new(|cx| List::new(TableListDelegate::new(), window, cx));
+        let table_list = cx.new(|cx| ListState::new(TableListDelegate::new(), window, cx));
 
         let _subscriptions = vec![
             cx.observe_global::<ConnectionState>(move |this, cx| {
@@ -373,7 +373,7 @@ impl Render for TablesPanel {
                     .border_color(cx.theme().border)
                     .rounded(cx.theme().radius)
                     .overflow_hidden()
-                    .child(self.table_list.clone()),
+                    .child(List::new(&self.table_list.clone())),
             )
     }
 }

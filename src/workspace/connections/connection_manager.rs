@@ -1,9 +1,9 @@
 use gpui::{prelude::FluentBuilder as _, *};
 use gpui_component::{
-    ActiveTheme as _, Icon, ListEvent, Sizable as _, StyledExt,
+    ActiveTheme as _, Icon, Sizable as _, StyledExt,
     button::{Button, ButtonVariants as _},
     label::Label,
-    list::List,
+    list::{List, ListEvent, ListState},
     v_flex,
 };
 
@@ -18,13 +18,14 @@ pub struct ConnectionManager {
     is_editing: bool,
     selected_connection: Option<ConnectionInfo>,
     connection_form: Entity<ConnectionForm>,
-    connection_list: Entity<List<ConnectionListDelegate>>,
+    connection_list: Entity<ListState<ConnectionListDelegate>>,
     _subscriptions: Vec<Subscription>,
 }
 
 impl ConnectionManager {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let connection_list = cx.new(|cx| List::new(ConnectionListDelegate::new(), window, cx));
+        let connection_list =
+            cx.new(|cx| ListState::new(ConnectionListDelegate::new(), window, cx));
 
         let conn_list_clone = connection_list.clone();
         let _subscriptions = vec![
@@ -128,7 +129,7 @@ impl ConnectionManager {
                     .border_color(cx.theme().border)
                     .rounded(cx.theme().radius)
                     .overflow_hidden()
-                    .child(self.connection_list.clone()),
+                    .child(List::new(&self.connection_list.clone())),
             )
     }
 }

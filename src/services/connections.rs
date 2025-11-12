@@ -1,6 +1,6 @@
 use async_std::fs;
 use gpui::SharedString;
-use gpui_component::dropdown::DropdownItem;
+use gpui_component::select::SelectItem;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
 use uuid::Uuid;
@@ -14,7 +14,7 @@ pub enum SslMode {
     VerifyFull,
 }
 
-impl DropdownItem for SslMode {
+impl SelectItem for SslMode {
     type Value = &'static str;
 
     fn title(&self) -> SharedString {

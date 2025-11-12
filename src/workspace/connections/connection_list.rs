@@ -1,7 +1,7 @@
 use gpui::*;
 use gpui_component::{
     IndexPath,
-    list::{List, ListDelegate},
+    list::{ListDelegate, ListState},
 };
 
 use crate::{services::*, workspace::connections::ConnectionListItem};
@@ -10,7 +10,6 @@ pub struct ConnectionListDelegate {
     connections: Vec<ConnectionInfo>,
     pub matched_connections: Vec<ConnectionInfo>,
     selected_index: Option<IndexPath>,
-    query: String,
 }
 
 impl ListDelegate for ConnectionListDelegate {
@@ -20,29 +19,12 @@ impl ListDelegate for ConnectionListDelegate {
         self.matched_connections.len()
     }
 
-    fn perform_search(
+    fn confirm(
         &mut self,
-        query: &str,
-        _: &mut Window,
-        _: &mut Context<List<Self>>,
-    ) -> Task<()> {
-        self.query = query.to_string();
-        self.matched_connections = if query.is_empty() {
-            self.connections.clone()
-        } else {
-            self.connections
-                .iter()
-                .filter(|conn| {
-                    conn.database.to_lowercase().contains(&query.to_lowercase())
-                        || conn.username.to_lowercase().contains(&query.to_lowercase())
-                })
-                .cloned()
-                .collect()
-        };
-        Task::ready(())
-    }
-
-    fn confirm(&mut self, _secondary: bool, _window: &mut Window, _cx: &mut Context<List<Self>>) {
+        _secondary: bool,
+        _window: &mut Window,
+        _cx: &mut Context<ListState<Self>>,
+    ) {
         if let Some(selected) = self.selected_index {
             if let Some(conn) = self.matched_connections.get(selected.row) {
                 println!("Selected connection: {}@{}", conn.username, conn.hostname);
@@ -53,19 +35,14 @@ impl ListDelegate for ConnectionListDelegate {
     fn set_selected_index(
         &mut self,
         ix: Option<IndexPath>,
-        _: &mut Window,
-        cx: &mut Context<List<Self>>,
+        _window: &mut Window,
+        cx: &mut Context<ListState<Self>>,
     ) {
         self.selected_index = ix;
         cx.notify();
     }
 
-    fn render_item(
-        &self,
-        ix: IndexPath,
-        _: &mut Window,
-        _: &mut Context<List<Self>>,
-    ) -> Option<Self::Item> {
+    fn render_item(&self, ix: IndexPath, _: &mut Window, _cx: &mut App) -> Option<Self::Item> {
         let selected = Some(ix) == self.selected_index;
         if let Some(conn) = self.matched_connections.get(ix.row) {
             return Some(ConnectionListItem::new(ix, conn.clone(), ix, selected));
@@ -80,7 +57,6 @@ impl ConnectionListDelegate {
             connections: vec![],
             matched_connections: vec![],
             selected_index: None,
-            query: String::new(),
         }
     }
 

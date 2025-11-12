@@ -1,0 +1,623 @@
+[
+  {
+    "label": "SELECT",
+    "detail": "SELECT columns FROM table",
+    "documentation": "Retrieve data from a database.\n\n## Example:\n```sql\nSELECT name, email FROM users;\n```"
+  },
+  {
+    "label": "FROM",
+    "detail": "FROM table_name",
+    "documentation": "Specify the table to query.\n\n**Usage:**\nThe `FROM` clause identifies the table or tables from which to retrieve data."
+  },
+  {
+    "label": "WHERE",
+    "detail": "WHERE condition",
+    "documentation": "Filter rows based on a condition.\n\n## Example:\n```sql\nSELECT * FROM users WHERE age > 18;\n```"
+  },
+  {
+    "label": "JOIN",
+    "detail": "JOIN table ON condition",
+    "documentation": "Combine rows from two or more tables.\n\n## Example:\n```sql\nSELECT u.name, o.order_id\nFROM users u\nJOIN orders o ON u.id = o.user_id;\n```"
+  },
+  {
+    "label": "INNER JOIN",
+    "detail": "INNER JOIN table ON condition",
+    "documentation": "Return rows that have matching values in both tables.\n\n**Note:** This is the most common type of join."
+  },
+  {
+    "label": "LEFT JOIN",
+    "detail": "LEFT JOIN table ON condition",
+    "documentation": "Return all rows from the left table and matching rows from the right table.\n\n## Example:\n```sql\nSELECT u.name, o.order_id\nFROM users u\nLEFT JOIN orders o ON u.id = o.user_id;\n```"
+  },
+  {
+    "label": "RIGHT JOIN",
+    "detail": "RIGHT JOIN table ON condition",
+    "documentation": "Return all rows from the right table and matching rows from the left table."
+  },
+  {
+    "label": "FULL JOIN",
+    "detail": "FULL JOIN table ON condition",
+    "documentation": "Return all rows when there is a match in either table."
+  },
+  {
+    "label": "CROSS JOIN",
+    "detail": "CROSS JOIN table",
+    "documentation": "Return the Cartesian product of two tables.\n\n**Warning:** Can produce very large result sets."
+  },
+  {
+    "label": "GROUP BY",
+    "detail": "GROUP BY column",
+    "documentation": "Group rows that have the same values.\n\n## Example:\n```sql\nSELECT department, COUNT(*) as employee_count\nFROM employees\nGROUP BY department;\n```"
+  },
+  {
+    "label": "HAVING",
+    "detail": "HAVING condition",
+    "documentation": "Filter groups based on a condition.\n\n**Note:** Used with GROUP BY to filter aggregated results.\n\n## Example:\n```sql\nSELECT department, COUNT(*)\nFROM employees\nGROUP BY department\nHAVING COUNT(*) > 5;\n```"
+  },
+  {
+    "label": "ORDER BY",
+    "detail": "ORDER BY column [ASC|DESC]",
+    "documentation": "Sort the result set.\n\n## Example:\n```sql\nSELECT name, age FROM users ORDER BY age DESC;\n```"
+  },
+  {
+    "label": "ASC",
+    "documentation": "Sort in ascending order (default)."
+  },
+  {
+    "label": "DESC",
+    "documentation": "Sort in descending order."
+  },
+  {
+    "label": "LIMIT",
+    "detail": "LIMIT number",
+    "documentation": "Limit the number of rows returned.\n\n## Example:\n```sql\nSELECT * FROM products LIMIT 10;\n```"
+  },
+  {
+    "label": "OFFSET",
+    "detail": "OFFSET number",
+    "documentation": "Skip a specified number of rows.\n\n**Usage:** Often used with LIMIT for pagination."
+  },
+  {
+    "label": "INSERT INTO",
+    "detail": "INSERT INTO table (columns) VALUES (values)",
+    "documentation": "Insert new rows into a table.\n\n## Example:\n```sql\nINSERT INTO users (name, email, age)\nVALUES ('John Doe', 'john@example.com', 30);\n```"
+  },
+  {
+    "label": "VALUES",
+    "detail": "VALUES (value1, value2, ...)",
+    "documentation": "Specify the values to insert."
+  },
+  {
+    "label": "UPDATE",
+    "detail": "UPDATE table SET column = value",
+    "documentation": "Modify existing rows in a table.\n\n## Example:\n```sql\nUPDATE users\nSET age = 31\nWHERE id = 1;\n```"
+  },
+  {
+    "label": "SET",
+    "detail": "SET column = value",
+    "documentation": "Specify the columns and values to update."
+  },
+  {
+    "label": "DELETE FROM",
+    "detail": "DELETE FROM table WHERE condition",
+    "documentation": "Remove rows from a table.\n\n## Example:\n```sql\nDELETE FROM users WHERE id = 1;\n```\n\n**Warning:** Without a WHERE clause, all rows will be deleted!"
+  },
+  {
+    "label": "CREATE TABLE",
+    "detail": "CREATE TABLE table_name (columns)",
+    "documentation": "Create a new table.\n\n## Example:\n```sql\nCREATE TABLE users (\n    id SERIAL PRIMARY KEY,\n    name VARCHAR(100) NOT NULL,\n    email VARCHAR(255) UNIQUE,\n    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n);\n```"
+  },
+  {
+    "label": "DROP TABLE",
+    "detail": "DROP TABLE [IF EXISTS] table_name",
+    "documentation": "Delete a table and all its data.\n\n**Warning:** This operation cannot be undone!"
+  },
+  {
+    "label": "ALTER TABLE",
+    "detail": "ALTER TABLE table_name action",
+    "documentation": "Modify an existing table structure.\n\n## Example:\n```sql\nALTER TABLE users ADD COLUMN phone VARCHAR(20);\n```"
+  },
+  {
+    "label": "ADD COLUMN",
+    "detail": "ADD COLUMN column_name data_type",
+    "documentation": "Add a new column to an existing table."
+  },
+  {
+    "label": "DROP COLUMN",
+    "detail": "DROP COLUMN column_name",
+    "documentation": "Remove a column from a table.\n\n**Warning:** This will delete all data in that column!"
+  },
+  {
+    "label": "TRUNCATE",
+    "detail": "TRUNCATE TABLE table_name",
+    "documentation": "Remove all rows from a table quickly.\n\n**Note:** Faster than DELETE but cannot be rolled back in some databases."
+  },
+  {
+    "label": "CREATE INDEX",
+    "detail": "CREATE INDEX index_name ON table (column)",
+    "documentation": "Create an index to improve query performance.\n\n## Example:\n```sql\nCREATE INDEX idx_email ON users(email);\n```"
+  },
+  {
+    "label": "DROP INDEX",
+    "detail": "DROP INDEX index_name",
+    "documentation": "Remove an index from a table."
+  },
+  {
+    "label": "PRIMARY KEY",
+    "documentation": "Define a column or set of columns as the primary key.\n\n**Details:** Primary keys uniquely identify each row and cannot contain NULL values."
+  },
+  {
+    "label": "FOREIGN KEY",
+    "detail": "FOREIGN KEY (column) REFERENCES table(column)",
+    "documentation": "Create a link between two tables.\n\n## Example:\n```sql\nFOREIGN KEY (user_id) REFERENCES users(id)\n```"
+  },
+  {
+    "label": "UNIQUE",
+    "documentation": "Ensure all values in a column are unique."
+  },
+  {
+    "label": "NOT NULL",
+    "documentation": "Prevent NULL values in a column."
+  },
+  {
+    "label": "DEFAULT",
+    "detail": "DEFAULT value",
+    "documentation": "Set a default value for a column.\n\n## Example:\n```sql\nstatus VARCHAR(20) DEFAULT 'active'\n```"
+  },
+  {
+    "label": "CHECK",
+    "detail": "CHECK (condition)",
+    "documentation": "Ensure values meet a specific condition.\n\n## Example:\n```sql\nage INT CHECK (age >= 18)\n```"
+  },
+  {
+    "label": "AS",
+    "detail": "AS alias_name",
+    "documentation": "Create an alias for a column or table.\n\n## Example:\n```sql\nSELECT name AS customer_name FROM users;\n```"
+  },
+  {
+    "label": "DISTINCT",
+    "detail": "SELECT DISTINCT column",
+    "documentation": "Return only unique values.\n\n## Example:\n```sql\nSELECT DISTINCT country FROM users;\n```"
+  },
+  {
+    "label": "AND",
+    "documentation": "Combine multiple conditions (all must be true).\n\n## Example:\n```sql\nWHERE age > 18 AND country = 'US'\n```"
+  },
+  {
+    "label": "OR",
+    "documentation": "Combine multiple conditions (at least one must be true)."
+  },
+  {
+    "label": "NOT",
+    "documentation": "Negate a condition."
+  },
+  {
+    "label": "IN",
+    "detail": "IN (value1, value2, ...)",
+    "documentation": "Check if a value matches any in a list.\n\n## Example:\n```sql\nWHERE country IN ('US', 'UK', 'CA')\n```"
+  },
+  {
+    "label": "BETWEEN",
+    "detail": "BETWEEN value1 AND value2",
+    "documentation": "Check if a value is within a range.\n\n## Example:\n```sql\nWHERE age BETWEEN 18 AND 65\n```"
+  },
+  {
+    "label": "LIKE",
+    "detail": "LIKE pattern",
+    "documentation": "Pattern matching with wildcards.\n\n## Example:\n```sql\nWHERE email LIKE '%@gmail.com'\n```\n\n**Wildcards:**\n- `%` matches any sequence of characters\n- `_` matches any single character"
+  },
+  {
+    "label": "ILIKE",
+    "detail": "ILIKE pattern",
+    "documentation": "Case-insensitive pattern matching (PostgreSQL).\n\n## Example:\n```sql\nWHERE name ILIKE '%john%'\n```"
+  },
+  {
+    "label": "IS NULL",
+    "documentation": "Check if a value is NULL.\n\n## Example:\n```sql\nWHERE email IS NULL\n```"
+  },
+  {
+    "label": "IS NOT NULL",
+    "documentation": "Check if a value is not NULL."
+  },
+  {
+    "label": "EXISTS",
+    "detail": "EXISTS (subquery)",
+    "documentation": "Check if a subquery returns any rows.\n\n## Example:\n```sql\nWHERE EXISTS (SELECT 1 FROM orders WHERE user_id = users.id)\n```"
+  },
+  {
+    "label": "CASE",
+    "detail": "CASE WHEN condition THEN result END",
+    "documentation": "Conditional logic in SQL.\n\n## Example:\n```sql\nSELECT name,\n  CASE\n    WHEN age < 18 THEN 'Minor'\n    WHEN age < 65 THEN 'Adult'\n    ELSE 'Senior'\n  END AS age_group\nFROM users;\n```"
+  },
+  {
+    "label": "WHEN",
+    "detail": "WHEN condition THEN result",
+    "documentation": "Define a condition in a CASE statement."
+  },
+  {
+    "label": "THEN",
+    "documentation": "Specify the result for a WHEN condition."
+  },
+  {
+    "label": "ELSE",
+    "documentation": "Provide a default result in a CASE statement."
+  },
+  {
+    "label": "END",
+    "documentation": "Close a CASE statement."
+  },
+  {
+    "label": "COUNT",
+    "detail": "COUNT(column)",
+    "documentation": "Count the number of rows.\n\n## Example:\n```sql\nSELECT COUNT(*) FROM users;\n```"
+  },
+  {
+    "label": "SUM",
+    "detail": "SUM(column)",
+    "documentation": "Calculate the sum of numeric values.\n\n## Example:\n```sql\nSELECT SUM(price) FROM orders;\n```"
+  },
+  {
+    "label": "AVG",
+    "detail": "AVG(column)",
+    "documentation": "Calculate the average of numeric values."
+  },
+  {
+    "label": "MIN",
+    "detail": "MIN(column)",
+    "documentation": "Find the minimum value."
+  },
+  {
+    "label": "MAX",
+    "detail": "MAX(column)",
+    "documentation": "Find the maximum value."
+  },
+  {
+    "label": "COALESCE",
+    "detail": "COALESCE(value1, value2, ...)",
+    "documentation": "Return the first non-NULL value.\n\n## Example:\n```sql\nSELECT COALESCE(phone, email, 'No contact') FROM users;\n```"
+  },
+  {
+    "label": "NULLIF",
+    "detail": "NULLIF(value1, value2)",
+    "documentation": "Return NULL if two values are equal, otherwise return the first value."
+  },
+  {
+    "label": "CONCAT",
+    "detail": "CONCAT(string1, string2, ...)",
+    "documentation": "Concatenate strings.\n\n## Example:\n```sql\nSELECT CONCAT(first_name, ' ', last_name) AS full_name FROM users;\n```"
+  },
+  {
+    "label": "UPPER",
+    "detail": "UPPER(string)",
+    "documentation": "Convert a string to uppercase."
+  },
+  {
+    "label": "LOWER",
+    "detail": "LOWER(string)",
+    "documentation": "Convert a string to lowercase."
+  },
+  {
+    "label": "LENGTH",
+    "detail": "LENGTH(string)",
+    "documentation": "Return the length of a string."
+  },
+  {
+    "label": "TRIM",
+    "detail": "TRIM(string)",
+    "documentation": "Remove leading and trailing whitespace."
+  },
+  {
+    "label": "SUBSTRING",
+    "detail": "SUBSTRING(string, start, length)",
+    "documentation": "Extract a substring.\n\n## Example:\n```sql\nSELECT SUBSTRING(email, 1, 5) FROM users;\n```"
+  },
+  {
+    "label": "REPLACE",
+    "detail": "REPLACE(string, from, to)",
+    "documentation": "Replace occurrences of a substring.\n\n## Example:\n```sql\nSELECT REPLACE(phone, '-', '') FROM users;\n```"
+  },
+  {
+    "label": "NOW",
+    "detail": "NOW()",
+    "documentation": "Return the current date and time.\n\n## Example:\n```sql\nSELECT NOW();\n```"
+  },
+  {
+    "label": "CURRENT_DATE",
+    "documentation": "Return the current date."
+  },
+  {
+    "label": "CURRENT_TIME",
+    "documentation": "Return the current time."
+  },
+  {
+    "label": "CURRENT_TIMESTAMP",
+    "documentation": "Return the current timestamp."
+  },
+  {
+    "label": "DATE_TRUNC",
+    "detail": "DATE_TRUNC('unit', timestamp)",
+    "documentation": "Truncate timestamp to specified precision (PostgreSQL).\n\n## Example:\n```sql\nSELECT DATE_TRUNC('month', created_at) FROM orders;\n```"
+  },
+  {
+    "label": "EXTRACT",
+    "detail": "EXTRACT(field FROM source)",
+    "documentation": "Extract a field from a date/time value.\n\n## Example:\n```sql\nSELECT EXTRACT(YEAR FROM created_at) FROM users;\n```"
+  },
+  {
+    "label": "INTERVAL",
+    "detail": "INTERVAL 'value unit'",
+    "documentation": "Represent a time interval.\n\n## Example:\n```sql\nWHERE created_at > NOW() - INTERVAL '7 days'\n```"
+  },
+  {
+    "label": "CAST",
+    "detail": "CAST(value AS type)",
+    "documentation": "Convert a value to a different data type.\n\n## Example:\n```sql\nSELECT CAST(price AS INTEGER) FROM products;\n```"
+  },
+  {
+    "label": "UNION",
+    "documentation": "Combine results from multiple SELECT statements (removes duplicates).\n\n## Example:\n```sql\nSELECT name FROM users\nUNION\nSELECT name FROM customers;\n```"
+  },
+  {
+    "label": "UNION ALL",
+    "documentation": "Combine results from multiple SELECT statements (keeps duplicates)."
+  },
+  {
+    "label": "INTERSECT",
+    "documentation": "Return rows that appear in both result sets."
+  },
+  {
+    "label": "EXCEPT",
+    "documentation": "Return rows from the first query that don't appear in the second."
+  },
+  {
+    "label": "WITH",
+    "detail": "WITH cte_name AS (query)",
+    "documentation": "Define a Common Table Expression (CTE).\n\n## Example:\n```sql\nWITH active_users AS (\n  SELECT * FROM users WHERE status = 'active'\n)\nSELECT * FROM active_users WHERE age > 18;\n```"
+  },
+  {
+    "label": "RECURSIVE",
+    "detail": "WITH RECURSIVE cte_name AS (query)",
+    "documentation": "Define a recursive Common Table Expression.\n\n**Usage:** Useful for hierarchical data like organizational charts or file systems."
+  },
+  {
+    "label": "WINDOW",
+    "detail": "OVER (PARTITION BY ... ORDER BY ...)",
+    "documentation": "Define a window for window functions.\n\n## Example:\n```sql\nSELECT name, salary,\n  RANK() OVER (PARTITION BY department ORDER BY salary DESC)\nFROM employees;\n```"
+  },
+  {
+    "label": "ROW_NUMBER",
+    "detail": "ROW_NUMBER() OVER (...)",
+    "documentation": "Assign a unique row number within a partition."
+  },
+  {
+    "label": "RANK",
+    "detail": "RANK() OVER (...)",
+    "documentation": "Assign a rank with gaps for ties."
+  },
+  {
+    "label": "DENSE_RANK",
+    "detail": "DENSE_RANK() OVER (...)",
+    "documentation": "Assign a rank without gaps for ties."
+  },
+  {
+    "label": "LAG",
+    "detail": "LAG(column, offset) OVER (...)",
+    "documentation": "Access data from a previous row.\n\n## Example:\n```sql\nSELECT date, sales,\n  LAG(sales, 1) OVER (ORDER BY date) AS previous_day_sales\nFROM daily_sales;\n```"
+  },
+  {
+    "label": "LEAD",
+    "detail": "LEAD(column, offset) OVER (...)",
+    "documentation": "Access data from a following row."
+  },
+  {
+    "label": "PARTITION BY",
+    "detail": "PARTITION BY column",
+    "documentation": "Divide the result set into partitions for window functions."
+  },
+  {
+    "label": "BEGIN",
+    "documentation": "Start a transaction.\n\n**Note:** Use with COMMIT or ROLLBACK to control transaction boundaries."
+  },
+  {
+    "label": "COMMIT",
+    "documentation": "Save all changes made in the current transaction."
+  },
+  {
+    "label": "ROLLBACK",
+    "documentation": "Undo all changes made in the current transaction."
+  },
+  {
+    "label": "SAVEPOINT",
+    "detail": "SAVEPOINT savepoint_name",
+    "documentation": "Create a point within a transaction to rollback to."
+  },
+  {
+    "label": "GRANT",
+    "detail": "GRANT privileges ON object TO user",
+    "documentation": "Give privileges to a user.\n\n## Example:\n```sql\nGRANT SELECT, INSERT ON users TO app_user;\n```"
+  },
+  {
+    "label": "REVOKE",
+    "detail": "REVOKE privileges ON object FROM user",
+    "documentation": "Remove privileges from a user."
+  },
+  {
+    "label": "CREATE VIEW",
+    "detail": "CREATE VIEW view_name AS query",
+    "documentation": "Create a virtual table based on a query.\n\n## Example:\n```sql\nCREATE VIEW active_users AS\nSELECT * FROM users WHERE status = 'active';\n```"
+  },
+  {
+    "label": "DROP VIEW",
+    "detail": "DROP VIEW view_name",
+    "documentation": "Delete a view."
+  },
+  {
+    "label": "MATERIALIZED VIEW",
+    "detail": "CREATE MATERIALIZED VIEW view_name AS query",
+    "documentation": "Create a view that stores query results physically (PostgreSQL).\n\n**Note:** Must be manually refreshed to update data."
+  },
+  {
+    "label": "REFRESH MATERIALIZED VIEW",
+    "detail": "REFRESH MATERIALIZED VIEW view_name",
+    "documentation": "Update the data in a materialized view (PostgreSQL)."
+  },
+  {
+    "label": "CREATE FUNCTION",
+    "detail": "CREATE FUNCTION function_name() RETURNS type",
+    "documentation": "Create a user-defined function.\n\n## Example (PostgreSQL):\n```sql\nCREATE FUNCTION add_numbers(a INT, b INT)\nRETURNS INT AS $$\nBEGIN\n  RETURN a + b;\nEND;\n$$ LANGUAGE plpgsql;\n```"
+  },
+  {
+    "label": "CREATE PROCEDURE",
+    "detail": "CREATE PROCEDURE procedure_name()",
+    "documentation": "Create a stored procedure."
+  },
+  {
+    "label": "CREATE TRIGGER",
+    "detail": "CREATE TRIGGER trigger_name",
+    "documentation": "Create a trigger that executes automatically on events.\n\n## Example:\n```sql\nCREATE TRIGGER update_timestamp\nBEFORE UPDATE ON users\nFOR EACH ROW\nEXECUTE FUNCTION update_modified_column();\n```"
+  },
+  {
+    "label": "BEFORE",
+    "documentation": "Execute trigger before the event."
+  },
+  {
+    "label": "AFTER",
+    "documentation": "Execute trigger after the event."
+  },
+  {
+    "label": "FOR EACH ROW",
+    "documentation": "Execute trigger once for each affected row."
+  },
+  {
+    "label": "INTEGER",
+    "documentation": "4-byte signed integer data type (-2,147,483,648 to 2,147,483,647)."
+  },
+  {
+    "label": "BIGINT",
+    "documentation": "8-byte signed integer data type."
+  },
+  {
+    "label": "SMALLINT",
+    "documentation": "2-byte signed integer data type."
+  },
+  {
+    "label": "SERIAL",
+    "documentation": "Auto-incrementing 4-byte integer (PostgreSQL)."
+  },
+  {
+    "label": "BIGSERIAL",
+    "documentation": "Auto-incrementing 8-byte integer (PostgreSQL)."
+  },
+  {
+    "label": "NUMERIC",
+    "detail": "NUMERIC(precision, scale)",
+    "documentation": "Exact numeric data type with user-defined precision."
+  },
+  {
+    "label": "DECIMAL",
+    "detail": "DECIMAL(precision, scale)",
+    "documentation": "Exact numeric data type (same as NUMERIC)."
+  },
+  {
+    "label": "REAL",
+    "documentation": "4-byte floating-point number."
+  },
+  {
+    "label": "DOUBLE PRECISION",
+    "documentation": "8-byte floating-point number."
+  },
+  {
+    "label": "VARCHAR",
+    "detail": "VARCHAR(n)",
+    "documentation": "Variable-length character string with limit.\n\n## Example:\n```sql\nname VARCHAR(100)\n```"
+  },
+  {
+    "label": "CHAR",
+    "detail": "CHAR(n)",
+    "documentation": "Fixed-length character string."
+  },
+  {
+    "label": "TEXT",
+    "documentation": "Variable-length character string with no specific limit."
+  },
+  {
+    "label": "BOOLEAN",
+    "documentation": "True/false value.\n\n**Values:** true, false, or NULL"
+  },
+  {
+    "label": "DATE",
+    "documentation": "Calendar date (year, month, day)."
+  },
+  {
+    "label": "TIME",
+    "documentation": "Time of day (no date)."
+  },
+  {
+    "label": "TIMESTAMP",
+    "documentation": "Date and time (with or without timezone)."
+  },
+  {
+    "label": "TIMESTAMPTZ",
+    "documentation": "Timestamp with timezone (PostgreSQL)."
+  },
+  {
+    "label": "UUID",
+    "documentation": "Universally unique identifier (PostgreSQL).\n\n## Example:\n```sql\nid UUID DEFAULT gen_random_uuid()\n```"
+  },
+  {
+    "label": "JSON",
+    "documentation": "JSON data type (stores JSON text)."
+  },
+  {
+    "label": "JSONB",
+    "documentation": "Binary JSON data type with indexing support (PostgreSQL).\n\n**Note:** More efficient than JSON for most operations."
+  },
+  {
+    "label": "ARRAY",
+    "detail": "column_type[]",
+    "documentation": "Array data type (PostgreSQL).\n\n## Example:\n```sql\ntags TEXT[]\n```"
+  },
+  {
+    "label": "RETURNING",
+    "detail": "RETURNING columns",
+    "documentation": "Return values from INSERT, UPDATE, or DELETE (PostgreSQL).\n\n## Example:\n```sql\nINSERT INTO users (name) VALUES ('John') RETURNING id;\n```"
+  },
+  {
+    "label": "ON CONFLICT",
+    "detail": "ON CONFLICT (column) DO ...",
+    "documentation": "Handle conflicts during INSERT (PostgreSQL).\n\n## Example:\n```sql\nINSERT INTO users (email, name)\nVALUES ('john@example.com', 'John')\nON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name;\n```"
+  },
+  {
+    "label": "DO NOTHING",
+    "documentation": "Ignore conflicts in an INSERT statement."
+  },
+  {
+    "label": "DO UPDATE",
+    "detail": "DO UPDATE SET column = value",
+    "documentation": "Update on conflict in an INSERT statement."
+  },
+  {
+    "label": "EXPLAIN",
+    "detail": "EXPLAIN query",
+    "documentation": "Show the execution plan for a query.\n\n## Example:\n```sql\nEXPLAIN SELECT * FROM users WHERE age > 18;\n```"
+  },
+  {
+    "label": "EXPLAIN ANALYZE",
+    "detail": "EXPLAIN ANALYZE query",
+    "documentation": "Show execution plan and run the query to get actual statistics."
+  },
+  {
+    "label": "VACUUM",
+    "documentation": "Clean up and optimize table storage (PostgreSQL)."
+  },
+  {
+    "label": "ANALYZE",
+    "detail": "ANALYZE table_name",
+    "documentation": "Update statistics for query planning."
+  },
+  {
+    "label": "FETCH",
+    "detail": "FETCH FIRST n ROWS ONLY",
+    "documentation": "Standard SQL alternative to LIMIT.\n\n## Example:\n```sql\nSELECT * FROM users FETCH FIRST 10 ROWS ONLY;\n```"
+  }
+]

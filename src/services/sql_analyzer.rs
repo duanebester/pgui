@@ -1,7 +1,6 @@
 use tree_sitter::{Parser, Tree};
 
 #[derive(Debug)]
-#[allow(dead_code)]
 pub struct SqlQuery {
     pub start_byte: usize,
     pub end_byte: usize,

@@ -11,12 +11,11 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 
 use gpui_component::ActiveTheme;
-use gpui_component::indicator::Indicator;
-use gpui_component::resizable::{ResizableState, resizable_panel, v_resizable};
+use gpui_component::resizable::{resizable_panel, v_resizable};
+use gpui_component::spinner::Spinner;
 
 pub struct Workspace {
     connection_state: ConnectionStatus,
-    resize_state: Entity<ResizableState>,
     header_bar: Entity<HeaderBar>,
     footer_bar: Entity<FooterBar>,
     tables_panel: Entity<TablesPanel>,
@@ -31,7 +30,6 @@ impl Workspace {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let header_bar = HeaderBar::view(window, cx);
         let footer_bar = FooterBar::view(window, cx);
-        let resize_state = ResizableState::new(cx);
         // let connections_panel = ConnectionsPanel::view(window, cx);
         // let connection_form = ConnectionForm::view(window, cx);
         let tables_panel = TablesPanel::view(window, cx);
@@ -66,7 +64,6 @@ impl Workspace {
         ];
 
         Self {
-            resize_state,
             header_bar,
             footer_bar,
             connection_manager,
@@ -184,7 +181,7 @@ impl Workspace {
             .w_full()
             .overflow_hidden()
             .child(
-                v_resizable("resizable", self.resize_state.clone())
+                v_resizable("resizable")
                     .child(
                         resizable_panel()
                             .size(px(400.))
@@ -222,7 +219,7 @@ impl Workspace {
                     .flex()
                     .flex_col()
                     .items_center()
-                    .child(Indicator::new())
+                    .child(Spinner::new())
                     .child("Loading"),
             );
 

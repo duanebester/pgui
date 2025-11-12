@@ -2,7 +2,7 @@ use gpui::{prelude::FluentBuilder as _, *};
 use gpui_component::{
     button::{Button, ButtonVariants as _},
     form::{form_field, v_form},
-    input::{InputState, TextInput},
+    input::{Input, InputState},
     *,
 };
 
@@ -240,47 +240,47 @@ impl Render for ConnectionForm {
             })
             .child(
                 v_form()
-                    .column(2)
+                    .columns(2)
                     .small()
                     .child(
                         form_field()
                             .col_span(2)
                             .label("Name")
                             .required(true)
-                            .child(TextInput::new(&self.name)),
+                            .child(Input::new(&self.name)),
                     )
                     .child(
                         form_field()
                             .label("Host/Socket")
                             .required(true)
-                            .child(TextInput::new(&self.hostname)),
+                            .child(Input::new(&self.hostname)),
                     )
                     .child(
                         form_field()
                             .label("Port")
                             .required(true)
-                            .child(TextInput::new(&self.port)),
+                            .child(Input::new(&self.port)),
                     )
                     .child(
                         form_field()
                             .label("Username")
                             .col_span(2)
                             .required(true)
-                            .child(TextInput::new(&self.username)),
+                            .child(Input::new(&self.username)),
                     )
                     .child(
                         form_field()
                             .col_span(2)
                             .label("Password")
                             .required(true)
-                            .child(TextInput::new(&self.password)),
+                            .child(Input::new(&self.password)),
                     )
                     .child(
                         form_field()
                             .col_span(2)
                             .label("Database")
                             .required(true)
-                            .child(TextInput::new(&self.database)),
+                            .child(Input::new(&self.database)),
                     )
                     .child(
                         form_field().no_label_indent().child(

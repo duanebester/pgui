@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use gpui::*;
 
-use crate::services::{ConnectionInfo, ConnectionsStore, DatabaseManager, SqlQuery};
+use crate::services::{ConnectionInfo, ConnectionsStore, DatabaseManager, TableInfo};
 
 #[derive(Clone, PartialEq)]
 pub enum ConnectionStatus {
@@ -26,16 +26,14 @@ impl LLMState {
 }
 
 pub struct EditorState {
-    pub sql_queries: Vec<SqlQuery>,
+    pub tables: Vec<TableInfo>,
 }
 
 impl Global for EditorState {}
 
 impl EditorState {
     pub fn init(cx: &mut App) {
-        let this = EditorState {
-            sql_queries: vec![],
-        };
+        let this = EditorState { tables: vec![] };
         cx.set_global(this);
     }
 }
@@ -92,6 +90,12 @@ impl ConnectionState {
                     let llm_schema = Some(db_manager.format_schema_for_llm(&schema).into());
                     let _ = cx.update_global::<LLMState, _>(|state, _cx| {
                         state.llm_schema = llm_schema;
+                    });
+                }
+
+                if let Ok(tables) = db_manager.get_tables().await {
+                    let _ = cx.update_global::<EditorState, _>(|state, _cx| {
+                        state.tables = tables;
                     });
                 }
 

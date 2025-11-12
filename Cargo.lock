@@ -2409,9 +2409,9 @@ dependencies = [
 
 [[package]]
 name = "gpui-component"
-version = "0.3.1"
+version = "0.4.0-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f3232f733e6b2b6ad47d008e41ce9f766218dfd7164ff760de8dfe6303dc8eb"
+checksum = "258630da9d39522115afa76af46880edd6448f46e77bb2b5f2fc24b3c27203a3"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -2476,9 +2476,9 @@ dependencies = [
 
 [[package]]
 name = "gpui-component-macros"
-version = "0.3.1"
+version = "0.4.0-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0908e53be8b27e7c185bd2c8996459055a98cbbf3f266382d028eb28270835a2"
+checksum = "93b479a30e9cf9bbd767bf5deb4caf6b6d5dd703c7db9e3a7312a463082140a7"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4333,7 +4333,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "pgui"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "async-channel 2.5.0",
@@ -4345,6 +4345,7 @@ dependencies = [
  "gpui-component",
  "hex",
  "keyring",
+ "lsp-types",
  "rust-embed",
  "rust_decimal",
  "serde",

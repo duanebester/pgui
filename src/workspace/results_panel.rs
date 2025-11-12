@@ -5,7 +5,7 @@ use gpui::*;
 use gpui_component::{
     ActiveTheme as _, Size, StyleSized, h_flex,
     label::Label,
-    table::{Column, Table, TableDelegate},
+    table::{Column, Table, TableDelegate, TableState},
     v_flex,
 };
 use serde::Deserialize;
@@ -16,8 +16,7 @@ struct ChangeSize(Size);
 
 pub struct ResultsPanel {
     current_result: Option<QueryExecutionResult>,
-    table: Entity<Table<ResultsTableDelegate>>,
-    size: Size,
+    table: Entity<TableState<ResultsTableDelegate>>,
 }
 
 struct ResultsTableDelegate {
@@ -64,12 +63,7 @@ impl TableDelegate for ResultsTableDelegate {
         self.columns.get(col_ix).unwrap()
     }
 
-    fn render_th(
-        &self,
-        col_ix: usize,
-        _: &mut Window,
-        cx: &mut Context<Table<Self>>,
-    ) -> impl IntoElement {
+    fn render_th(&self, col_ix: usize, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let th = div().child(format!("{}", self.column(col_ix, cx).name));
 
         if col_ix >= 3 && col_ix <= 10 {
@@ -79,20 +73,13 @@ impl TableDelegate for ResultsTableDelegate {
         }
     }
 
-    fn render_tr(
-        &self,
-        row_ix: usize,
-        _: &mut Window,
-        cx: &mut Context<Table<Self>>,
-    ) -> gpui::Stateful<gpui::Div> {
-        div()
-            .id(row_ix)
-            .on_click(cx.listener(|_, ev: &ClickEvent, _, _| {
-                println!(
-                    "You have clicked row with secondary: {}",
-                    ev.modifiers().secondary()
-                )
-            }))
+    fn render_tr(&self, row_ix: usize, _: &mut Window, _cx: &mut App) -> gpui::Stateful<gpui::Div> {
+        div().id(row_ix).on_click(|ev: &ClickEvent, _, _| {
+            println!(
+                "You have clicked row with secondary: {}",
+                ev.modifiers().secondary()
+            )
+        })
     }
 
     fn render_td(
@@ -100,7 +87,7 @@ impl TableDelegate for ResultsTableDelegate {
         row_ix: usize,
         col_ix: usize,
         _: &mut Window,
-        _cx: &mut Context<Table<Self>>,
+        _: &mut App,
     ) -> impl IntoElement {
         if let Some(row) = self.rows.get(row_ix) {
             if let Some(cell_value) = row.get(col_ix) {
@@ -116,7 +103,7 @@ impl TableDelegate for ResultsTableDelegate {
         col_ix: usize,
         to_ix: usize,
         _: &mut Window,
-        _: &mut Context<Table<Self>>,
+        _: &mut Context<TableState<Self>>,
     ) {
         let col = self.columns.remove(col_ix);
         self.columns.insert(to_ix, col);
@@ -130,7 +117,7 @@ impl TableDelegate for ResultsTableDelegate {
         150
     }
 
-    fn load_more(&mut self, _: &mut Window, cx: &mut Context<Table<Self>>) {
+    fn load_more(&mut self, _: &mut Window, cx: &mut Context<TableState<Self>>) {
         self.loading = true;
         cx.spawn(async move |view, cx| {
             // Simulate network request, delay 1s to load data.
@@ -148,7 +135,7 @@ impl TableDelegate for ResultsTableDelegate {
         &mut self,
         visible_range: Range<usize>,
         _: &mut Window,
-        _: &mut Context<Table<Self>>,
+        _: &mut Context<TableState<Self>>,
     ) {
         self.visible_rows = visible_range;
     }
@@ -157,16 +144,11 @@ impl TableDelegate for ResultsTableDelegate {
 impl ResultsPanel {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let delegate = ResultsTableDelegate::new();
-        let table = cx.new(|cx| {
-            let mut t = Table::new(delegate, window, cx);
-            t.set_stripe(true, cx);
-            t
-        });
+        let table = cx.new(|cx| TableState::new(delegate, window, cx));
 
         Self {
             current_result: None,
             table,
-            size: Size::default(),
         }
     }
 
@@ -184,41 +166,15 @@ impl ResultsPanel {
         }
         cx.notify();
     }
-
-    #[allow(unused)]
-    fn on_change_size(&mut self, a: &ChangeSize, _: &mut Window, cx: &mut Context<Self>) {
-        println!("Size: {:?}", a.0);
-        self.size = a.0;
-        self.table.update(cx, |table, cx| {
-            table.set_size(a.0, cx);
-            table.delegate_mut().size = a.0;
-            cx.notify();
-        });
-        cx.notify();
-    }
-
-    #[allow(dead_code)]
-    pub fn clear_results(&mut self, cx: &mut Context<Self>) {
-        self.current_result = None;
-        self.table.update(cx, |table, cx| {
-            table.delegate_mut().update(QueryResult {
-                columns: vec![],
-                rows: vec![],
-                row_count: 0,
-                execution_time_ms: 0,
-            });
-            table.refresh(cx);
-        });
-        cx.notify();
-    }
 }
 
 impl Render for ResultsPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         match &self.current_result {
-            Some(QueryExecutionResult::Select(_result)) => {
-                v_flex().size_full().p_4().child(self.table.clone())
-            }
+            Some(QueryExecutionResult::Select(_result)) => v_flex()
+                .size_full()
+                .p_4()
+                .child(Table::new(&self.table.clone()).stripe(true)),
             Some(QueryExecutionResult::Modified {
                 rows_affected,
                 execution_time_ms,

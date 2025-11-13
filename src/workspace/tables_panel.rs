@@ -74,10 +74,13 @@ impl RenderOnce for TableListItem {
             .px_3()
             .py_2()
             .overflow_x_hidden()
+            .bg(bg_color)
+            .border_1()
+            .border_color(bg_color)
             .when(self.selected, |this| {
                 this.border_color(cx.theme().list_active_border)
             })
-            .bg(bg_color)
+            .rounded(cx.theme().radius)
             .child(
                 h_flex()
                     .items_center()
@@ -188,6 +191,10 @@ impl ListDelegate for TableListDelegate {
     fn load_more(&mut self, _window: &mut Window, _cx: &mut Context<ListState<Self>>) {
         // No-op for tables
     }
+
+    fn is_eof(&self, _: &App) -> bool {
+        true // Always at EOF since we load all tables at once
+    }
 }
 
 impl TableListDelegate {
@@ -224,7 +231,8 @@ pub struct TablesPanel {
 
 impl TablesPanel {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let table_list = cx.new(|cx| ListState::new(TableListDelegate::new(), window, cx));
+        let table_list =
+            cx.new(|cx| ListState::new(TableListDelegate::new(), window, cx).searchable(true));
 
         let _subscriptions = vec![
             cx.observe_global::<ConnectionState>(move |this, cx| {
@@ -358,7 +366,7 @@ impl Render for TablesPanel {
             .size_full()
             .gap_2()
             .p_3()
-            .bg(cx.theme().sidebar_primary_foreground)
+            // .bg(cx.theme().sidebar_primary_foreground)
             .child(header)
             .child(
                 Label::new(status_text)
@@ -366,14 +374,13 @@ impl Render for TablesPanel {
                     .text_color(cx.theme().foreground),
             )
             .child(
-                div()
+                List::new(&self.table_list)
+                    .p(px(8.))
                     .flex_1()
                     .w_full()
                     .border_1()
                     .border_color(cx.theme().border)
-                    .rounded(cx.theme().radius)
-                    .overflow_hidden()
-                    .child(List::new(&self.table_list.clone())),
+                    .rounded(cx.theme().radius),
             )
     }
 }

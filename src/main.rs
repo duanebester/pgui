@@ -26,6 +26,7 @@ fn main() {
             EditorState::init(cx);
             LLMState::init(cx);
             change_color_mode(cx.theme().mode, win, cx);
+            cx.activate(true);
 
             let workspace_view = Workspace::view(win, cx);
             cx.new(|cx| Root::new(workspace_view.into(), win, cx))

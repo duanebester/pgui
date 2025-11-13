@@ -122,14 +122,13 @@ impl ConnectionManager {
             .items_start()
             .child(title)
             .child(
-                div()
+                List::new(&self.connection_list)
+                    .p(px(8.))
                     .flex_1()
                     .w_full()
                     .border_1()
                     .border_color(cx.theme().border)
-                    .rounded(cx.theme().radius)
-                    .overflow_hidden()
-                    .child(List::new(&self.connection_list.clone())),
+                    .rounded(cx.theme().radius),
             )
     }
 }
@@ -140,7 +139,7 @@ impl Render for ConnectionManager {
             .id("connection-manager-sidebar")
             .flex()
             .h_full()
-            .bg(cx.theme().sidebar_primary_foreground)
+            .bg(cx.theme().sidebar)
             .border_color(cx.theme().border)
             .border_r_1()
             .min_w(px(300.0))
@@ -159,6 +158,7 @@ impl Render for ConnectionManager {
         let main = div()
             .id("connection-manager-main")
             .flex()
+            .bg(cx.theme().tiles)
             .flex_col()
             .w_full()
             .p_4()

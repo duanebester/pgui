@@ -62,9 +62,12 @@ impl RenderOnce for ConnectionListItem {
             .py_2()
             .overflow_x_hidden()
             .bg(bg_color)
+            .border_1()
+            .border_color(bg_color)
             .when(self.selected, |this| {
                 this.border_color(cx.theme().list_active_border)
             })
+            .rounded(cx.theme().radius)
             .child(
                 h_flex()
                     .items_center()

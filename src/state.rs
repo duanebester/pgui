@@ -73,10 +73,20 @@ impl ConnectionState {
         let _ = cx.update_global::<ConnectionState, _>(|state, _cx| {
             state.connection_state = ConnectionStatus::Connecting;
         });
-        let cic = connection_info.clone();
+        let mut cic = connection_info.clone();
         let app_state = cx.global::<ConnectionState>();
         let db_manager = app_state.db_manager.clone();
         cx.spawn(async move |cx| {
+            // Load password from keychain on-demand
+            if let Ok(password) = ConnectionsStore::get_connection_password(&cic.id) {
+                cic.password = password;
+            } else {
+                let _ = cx.update_global::<ConnectionState, _>(|state, _cx| {
+                    state.connection_state = ConnectionStatus::Disconnected;
+                });
+                return;
+            }
+
             // Use secure connection options instead of string
             let connect_options = cic.to_pg_connect_options();
 

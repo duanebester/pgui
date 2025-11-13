@@ -7,7 +7,7 @@ const APP_NAME: &str = "PGUI";
 const BUNDLE_ID: &str = "com.duanebester.pgui";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const EXECUTABLE_NAME: &str = "pgui";
-const SVG_FILE: &str = "assets/icons/db-next.svg";
+const SVG_FILE: &str = "assets/icons/db-spark.svg";
 
 fn main() -> Result<()> {
     println!("🚀 Building complete Mac app for PGUI...");

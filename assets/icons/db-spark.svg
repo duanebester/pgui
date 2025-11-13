@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Gradient Definitions -->
+  <defs>
+    <linearGradient id="primaryGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4F46E5;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7C3AED;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="accentGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#06B6D4;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3B82F6;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="glowGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#60A5FA;stop-opacity:0.6" />
+      <stop offset="100%" style="stop-color:#A78BFA;stop-opacity:0.6" />
+    </linearGradient>
+  </defs>
+
+  <!-- Outer glow circle (AI aura) -->
+  <circle cx="128" cy="128" r="90" fill="url(#glowGradient)" opacity="0.2"/>
+
+  <!-- Database cylinder layers (stylized) -->
+  <ellipse cx="128" cy="100" rx="60" ry="18" fill="url(#primaryGradient)" opacity="0.3"/>
+  <ellipse cx="128" cy="120" rx="60" ry="18" fill="url(#primaryGradient)" opacity="0.5"/>
+  <ellipse cx="128" cy="140" rx="60" ry="18" fill="url(#primaryGradient)" opacity="0.7"/>
+
+  <!-- Main database structure -->
+  <path d="M 68 100 L 68 160 Q 68 178 128 178 Q 188 178 188 160 L 188 100"
+        fill="url(#primaryGradient)" opacity="0.9"/>
+
+  <!-- Top ellipse (database top) -->
+  <ellipse cx="128" cy="100" rx="60" ry="18" fill="url(#primaryGradient)"/>
+  <ellipse cx="128" cy="100" rx="60" ry="18" fill="none" stroke="url(#accentGradient)" stroke-width="2"/>
+
+  <!-- Sparkle icon (scaled and centered) -->
+  <g transform="translate(128, 135) scale(2.5)">
+    <path d="M-0.983-9.186a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"
+          fill="#FFFFFF" opacity="0.75"/>
+  </g>
+</svg>

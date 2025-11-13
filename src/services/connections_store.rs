@@ -180,8 +180,9 @@ impl ConnectionsStore {
         for (id_str, name, hostname, username, database, port, ssl_mode_str) in rows {
             let id = Uuid::parse_str(&id_str).context("Invalid UUID in database")?;
 
-            // Try to get password from keyring, use empty string if not found
-            let password = Self::get_password(&id).unwrap_or_default();
+            // DON'T load password during startup to avoid multiple keychain prompts
+            // Password will be loaded on-demand when connecting
+            let password = String::new();
 
             connections.push(ConnectionInfo {
                 id,
@@ -311,7 +312,8 @@ impl ConnectionsStore {
         Ok(result.map(
             |(id_str, name, hostname, username, database, port, ssl_mode_str)| {
                 let id = Uuid::parse_str(&id_str).unwrap_or_else(|_| Uuid::new_v4());
-                let password = Self::get_password(&id).unwrap_or_default();
+                // DON'T load password here either - let caller load it on-demand
+                let password = String::new();
 
                 ConnectionInfo {
                     id,
@@ -325,6 +327,13 @@ impl ConnectionsStore {
                 }
             },
         ))
+    }
+
+    /// Get password for a specific connection from keyring
+    /// This should be called on-demand when actually connecting to avoid
+    /// multiple keychain access prompts on startup
+    pub fn get_connection_password(connection_id: &Uuid) -> Result<String> {
+        Self::get_password(connection_id)
     }
 
     /// Check if a connection with the given name exists

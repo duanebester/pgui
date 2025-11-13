@@ -11,6 +11,7 @@ cargo run --bin build-app
 ```
 
 This will:
+
 1. Build the release executable with `cargo build --release`
 2. Create the Mac app bundle structure
 3. Generate an app icon from an existing SVG icon
@@ -41,13 +42,14 @@ PGUI.app/
 The script will automatically install `librsvg` via Homebrew if needed (for SVG to PNG conversion).
 
 If you don't have Homebrew:
+
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
 ## Customization
 
-Edit the variables at the top of `build_complete_app.sh`:
+Edit the variables at the top of `[build_app.rs](./src/bin/build_app.rs)`:
 
 - `APP_NAME`: Display name of your app
 - `BUNDLE_ID`: Unique identifier (use your own domain)
@@ -72,16 +74,19 @@ codesign --verify --verbose PGUI.app
 ## Troubleshooting
 
 **App won't open**: Check Console.app for error messages, or try running the executable directly:
+
 ```bash
 ./PGUI.app/Contents/MacOS/PGUI
 ```
 
 **Permission denied**: Make sure the executable is marked as executable:
+
 ```bash
 chmod +x PGUI.app/Contents/MacOS/PGUI
 ```
 
 **Icon not showing**: Restart Dock to refresh icon cache:
+
 ```bash
 killall Dock
 ```

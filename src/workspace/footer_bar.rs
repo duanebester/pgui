@@ -1,12 +1,10 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::button::{Button, ButtonVariants as _};
-use gpui_component::{ActiveTheme, Icon, IconName, Selectable as _, Sizable as _};
+use gpui_component::{ActiveTheme, Icon, Selectable as _, Sizable as _};
 
 use crate::services::ConnectionInfo;
 use crate::state::{ConnectionState, ConnectionStatus};
-
-const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct FooterBar {
     active_connection: Option<ConnectionInfo>,
@@ -70,18 +68,6 @@ impl Render for FooterBar {
             .when(!self.is_connected.clone(), |d| d.invisible())
             .child(tables_button);
 
-        let version = div()
-            .flex()
-            .flex_row()
-            .items_center()
-            .justify_center()
-            .pr_2()
-            .gap_1()
-            .text_xs()
-            .opacity(0.6)
-            .child(format!("v{}", VERSION))
-            .child(Icon::new(IconName::Heart).xsmall());
-
         let footer = div()
             .border_t_1()
             .text_xs()
@@ -89,12 +75,11 @@ impl Render for FooterBar {
             .border_color(cx.theme().border)
             .flex()
             .flex_row()
-            .justify_between()
+            .justify_start()
             .items_center()
             .py_1()
             .px_2()
-            .child(controls)
-            .child(version);
+            .child(controls);
 
         footer
     }

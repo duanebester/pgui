@@ -204,3 +204,9 @@ impl ConnectionState {
         .detach();
     }
 }
+
+pub fn init(cx: &mut App) {
+    ConnectionState::init(cx);
+    EditorState::init(cx);
+    LLMState::init(cx);
+}

@@ -1,12 +1,13 @@
 use super::connections::ConnectionManager;
+use super::editor::Editor;
 use super::editor::EditorEvent;
 use super::footer_bar::{FooterBar, FooterBarEvent};
 use super::header_bar::HeaderBar;
-use super::tables_panel::{TableEvent, TablesPanel};
-use super::{editor::Editor, results_panel::ResultsPanel};
+use super::tables_tree::{TableEvent, TablesTree};
 
-use crate::services::{QueryExecutionResult, TableInfo};
+use crate::services::{EnhancedQueryExecutionResult, TableInfo};
 use crate::state::{ConnectionState, ConnectionStatus};
+use crate::workspace::results_panel::EnhancedResultsPanel;
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 
@@ -18,10 +19,10 @@ pub struct Workspace {
     connection_state: ConnectionStatus,
     header_bar: Entity<HeaderBar>,
     footer_bar: Entity<FooterBar>,
-    tables_panel: Entity<TablesPanel>,
+    tables_tree: Entity<TablesTree>,
     editor: Entity<Editor>,
     connection_manager: Entity<ConnectionManager>,
-    results_panel: Entity<ResultsPanel>,
+    enhanced_results: Entity<EnhancedResultsPanel>,
     _subscriptions: Vec<Subscription>,
     show_tables: bool,
 }
@@ -30,11 +31,9 @@ impl Workspace {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let header_bar = HeaderBar::view(window, cx);
         let footer_bar = FooterBar::view(window, cx);
-        // let connections_panel = ConnectionsPanel::view(window, cx);
-        // let connection_form = ConnectionForm::view(window, cx);
-        let tables_panel = TablesPanel::view(window, cx);
+        let tables_tree = TablesTree::view(window, cx);
         let editor = Editor::view(window, cx);
-        let results_panel = ResultsPanel::view(window, cx);
+        let enhanced_results = EnhancedResultsPanel::view(window, cx);
         let connection_manager = ConnectionManager::view(window, cx);
 
         let _subscriptions = vec![
@@ -47,7 +46,7 @@ impl Workspace {
                     this.execute_query(query.clone(), cx);
                 }
             }),
-            cx.subscribe(&tables_panel, |this, _, event: &TableEvent, cx| {
+            cx.subscribe(&tables_tree, |this, _, event: &TableEvent, cx| {
                 this.handle_table_event(event, cx);
             }),
             cx.subscribe(&footer_bar, |this, _, event: &FooterBarEvent, cx| {
@@ -67,9 +66,9 @@ impl Workspace {
             header_bar,
             footer_bar,
             connection_manager,
-            tables_panel,
+            tables_tree,
             editor,
-            results_panel,
+            enhanced_results,
             _subscriptions,
             connection_state: ConnectionStatus::Disconnected,
             show_tables: true,
@@ -90,11 +89,10 @@ impl Workspace {
         let db_manager = cx.global::<ConnectionState>().db_manager.clone();
 
         cx.spawn(async move |this, cx| {
-            let result = db_manager.execute_query(&query).await;
-
+            let result = db_manager.execute_query_enhanced(&query).await;
             this.update(cx, |this, cx| {
                 // Update results panel
-                this.results_panel.update(cx, |results, cx| {
+                this.enhanced_results.update(cx, |results, cx| {
                     results.update_result(result, cx);
                 });
 
@@ -130,14 +128,14 @@ impl Workspace {
             this.update(cx, |this, cx| {
                 match result {
                     Ok(query_result) => {
-                        this.results_panel.update(cx, |results, cx| {
-                            results.update_result(QueryExecutionResult::Select(query_result), cx);
+                        this.enhanced_results.update(cx, |results, cx| {
+                            results.update_result(query_result, cx);
                         });
                     }
                     Err(e) => {
-                        this.results_panel.update(cx, |results, cx| {
+                        this.enhanced_results.update(cx, |results, cx| {
                             results.update_result(
-                                QueryExecutionResult::Error(format!(
+                                EnhancedQueryExecutionResult::Error(format!(
                                     "Failed to load table columns: {}",
                                     e
                                 )),
@@ -172,7 +170,7 @@ impl Workspace {
             .border_color(cx.theme().border)
             .border_r_1()
             .min_w(px(300.0))
-            .child(self.tables_panel.clone());
+            .child(self.tables_tree.clone());
 
         let main = div()
             .id("connected-main")
@@ -191,7 +189,7 @@ impl Workspace {
                     .child(
                         resizable_panel()
                             .size(px(200.))
-                            .child(self.results_panel.clone()),
+                            .child(self.enhanced_results.clone()),
                     ),
             );
 

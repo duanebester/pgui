@@ -3,42 +3,20 @@ use async_std::sync::RwLock;
 use serde::{Deserialize, Serialize};
 use sqlx::{
     Column, PgPool, Row, TypeInfo, ValueRef,
-    postgres::{PgConnectOptions, PgPoolOptions},
+    postgres::{PgColumn, PgConnectOptions, PgPoolOptions, PgRow, types::Oid},
+    query::Query,
 };
-use std::{sync::Arc, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+    time::Duration,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TableInfo {
     pub table_name: String,
     pub table_schema: String,
     pub table_type: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QueryResult {
-    pub columns: Vec<String>,
-    pub rows: Vec<Vec<String>>,
-    pub row_count: usize,
-    pub execution_time_ms: u128,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ColumnInfo {
-    pub column_name: String,
-    pub data_type: String,
-    pub is_nullable: String,
-    pub column_default: Option<String>,
-    pub ordinal_position: i32,
-}
-
-#[derive(Debug, Clone)]
-pub enum QueryExecutionResult {
-    Select(QueryResult),
-    Modified {
-        rows_affected: u64,
-        execution_time_ms: u128,
-    },
-    Error(String),
 }
 
 // New structs for comprehensive schema information
@@ -100,12 +78,75 @@ pub struct DatabaseSchema {
     pub total_tables: usize,
 }
 
+// ============================================================================
+// Enhanced Query Result Structures with Full Metadata
+// ============================================================================
+
+/// Metadata about a column from a query result
+/// This is database-agnostic but captures PostgreSQL-specific info when available
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResultColumnMetadata {
+    pub name: String,
+    pub type_name: String,
+    pub ordinal: usize,
+    /// The source table name (if available from query metadata)
+    pub table_name: Option<String>,
+    /// Whether the column allows NULL values
+    pub is_nullable: Option<bool>,
+}
+
+/// A cell value with its metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResultCell {
+    /// String representation of the value
+    pub value: String,
+    /// Whether the value is NULL
+    pub is_null: bool,
+    /// Column metadata for this cell
+    pub column_metadata: ResultColumnMetadata,
+}
+
+/// A row with full metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResultRow {
+    pub cells: Vec<ResultCell>,
+}
+
+/// Enhanced query result with full metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnhancedQueryResult {
+    pub columns: Vec<ResultColumnMetadata>,
+    pub rows: Vec<ResultRow>,
+    pub row_count: usize,
+    pub execution_time_ms: u128,
+}
+
+/// Result of an enhanced query execution
+#[derive(Debug, Clone)]
+pub enum EnhancedQueryExecutionResult {
+    Select(EnhancedQueryResult),
+    Modified {
+        rows_affected: u64,
+        execution_time_ms: u128,
+    },
+    Error(String),
+}
+
+struct TableMetadata {
+    oid_to_table_name: HashMap<Oid, String>,
+    column_nullable_map: HashMap<(Oid, String), bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatabaseInfo {
+    pub datname: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct DatabaseManager {
     pool: Arc<RwLock<Option<PgPool>>>,
 }
 
-#[allow(dead_code)]
 impl DatabaseManager {
     pub fn new() -> Self {
         Self {
@@ -113,22 +154,9 @@ impl DatabaseManager {
         }
     }
 
-    #[deprecated(since = "0.1.2", note = "Use connect_with_options() instead")]
-    pub async fn connect(&self, database_url: &str) -> Result<()> {
-        let pool_opts = PgPoolOptions::new()
-            .max_connections(5) // Increased from 1
-            .acquire_timeout(Duration::from_secs(5)); // Increased timeout
-
-        let pool = pool_opts.connect(database_url).await?;
-
-        let mut pool_guard = self.pool.write().await;
-        *pool_guard = Some(pool);
-        Ok(())
-    }
-
     pub async fn connect_with_options(&self, options: PgConnectOptions) -> Result<()> {
         let pool_opts = PgPoolOptions::new()
-            .max_connections(5) // Better than 1 for UI responsiveness
+            .max_connections(5)
             .acquire_timeout(Duration::from_secs(5));
 
         let pool = pool_opts.connect_with(options).await?;
@@ -138,6 +166,7 @@ impl DatabaseManager {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub async fn test_connection_options(options: PgConnectOptions) -> Result<()> {
         // Create a temporary connection just for testing
         let pool = PgPoolOptions::new()
@@ -177,6 +206,33 @@ impl DatabaseManager {
         }
     }
 
+    #[allow(dead_code)]
+    pub async fn get_databases(&self) -> Result<Vec<DatabaseInfo>> {
+        let pool_guard = self.pool.read().await;
+        let pool = pool_guard
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Database not connected"))?;
+
+        let query = r#"
+            SELECT datname
+            FROM pg_database
+            WHERE datistemplate = false
+            AND datname != 'postgres'
+            ORDER BY datname
+        "#;
+
+        let rows = sqlx::query(query).fetch_all(pool).await?;
+
+        let databases = rows
+            .into_iter()
+            .map(|row| DatabaseInfo {
+                datname: row.get("datname"),
+            })
+            .collect();
+
+        Ok(databases)
+    }
+
     pub async fn get_tables(&self) -> Result<Vec<TableInfo>> {
         let pool_guard = self.pool.read().await;
         let pool = pool_guard
@@ -211,9 +267,7 @@ impl DatabaseManager {
         &self,
         table_name: &str,
         table_schema: &str,
-    ) -> Result<QueryResult> {
-        let start_time = std::time::Instant::now();
-
+    ) -> Result<EnhancedQueryExecutionResult> {
         let pool_guard = self.pool.read().await;
         let pool = pool_guard
             .as_ref()
@@ -231,54 +285,9 @@ impl DatabaseManager {
             ORDER BY ordinal_position
         "#;
 
-        let rows = sqlx::query(query)
-            .bind(table_name)
-            .bind(table_schema)
-            .fetch_all(pool)
-            .await?;
-
-        let execution_time_ms = start_time.elapsed().as_millis();
-
-        let columns: Vec<ColumnInfo> = rows
-            .into_iter()
-            .map(|row| ColumnInfo {
-                column_name: row.get("column_name"),
-                data_type: row.get("data_type"),
-                is_nullable: row.get("is_nullable"),
-                column_default: row.get("column_default"),
-                ordinal_position: row.get("ordinal_position"),
-            })
-            .collect();
-
-        // Convert columns to QueryResult format for display
-        let column_names = vec![
-            "Column Name".to_string(),
-            "Data Type".to_string(),
-            "Nullable".to_string(),
-            "Default".to_string(),
-        ];
-        let column_rows: Vec<Vec<String>> = columns
-            .into_iter()
-            .map(|col| {
-                vec![
-                    col.column_name,
-                    col.data_type,
-                    col.is_nullable,
-                    col.column_default.unwrap_or_else(|| "NULL".to_string()),
-                ]
-            })
-            .collect();
-
-        let row_count = column_rows.len(); // Store length before moving
-
-        let query_result = QueryResult {
-            columns: column_names,
-            rows: column_rows,
-            row_count,
-            execution_time_ms,
-        };
-
-        Ok(query_result)
+        let query = sqlx::query(query).bind(table_name).bind(table_schema);
+        let result = self.execute_base_query(query, pool).await;
+        Ok(result)
     }
 
     /// Retrieves comprehensive schema information for all tables or specific tables
@@ -641,161 +650,6 @@ impl DatabaseManager {
         output
     }
 
-    pub async fn execute_query(&self, sql: &str) -> QueryExecutionResult {
-        let start_time = std::time::Instant::now();
-
-        let pool_guard = match self.pool.read().await {
-            pool => pool,
-        };
-
-        let pool = match pool_guard.as_ref() {
-            Some(pool) => pool,
-            None => return QueryExecutionResult::Error("Database not connected".to_string()),
-        };
-
-        // Trim whitespace and check if query is empty
-        let sql = sql.trim();
-        if sql.is_empty() {
-            return QueryExecutionResult::Error("Empty query".to_string());
-        }
-
-        // Check if this is a SELECT statement (simplified check)
-        let is_select = sql.to_lowercase().trim_start().starts_with("select")
-            || sql.to_lowercase().trim_start().starts_with("with");
-
-        if is_select {
-            match sqlx::query(sql).fetch_all(pool).await {
-                Ok(rows) => {
-                    let execution_time = start_time.elapsed().as_millis();
-
-                    if rows.is_empty() {
-                        return QueryExecutionResult::Select(QueryResult {
-                            columns: vec![],
-                            rows: vec![],
-                            row_count: 0,
-                            execution_time_ms: execution_time,
-                        });
-                    }
-
-                    // Get column names from the first row
-                    let columns: Vec<String> = rows[0]
-                        .columns()
-                        .iter()
-                        .map(|col| col.name().to_string())
-                        .collect();
-
-                    // Convert rows to string representation
-                    let mut result_rows = Vec::new();
-                    for row in &rows {
-                        let mut string_row = Vec::new();
-                        for (i, column) in row.columns().iter().enumerate() {
-                            let value = match row.try_get_raw(i) {
-                                Ok(raw_value) => {
-                                    if raw_value.is_null() {
-                                        "NULL".to_string()
-                                    } else {
-                                        // Try to convert to string representation
-                                        match column.type_info().name() {
-                                            "BOOL" => row
-                                                .try_get::<bool, _>(i)
-                                                .map(|v| v.to_string())
-                                                .unwrap_or_else(|_| "NULL".to_string()),
-                                            "INT2" | "INT4" => row
-                                                .try_get::<i32, _>(i)
-                                                .map(|v| v.to_string())
-                                                .unwrap_or_else(|_| "NULL".to_string()),
-                                            "INT8" => row
-                                                .try_get::<i64, _>(i)
-                                                .map(|v| v.to_string())
-                                                .unwrap_or_else(|_| "NULL".to_string()),
-                                            "FLOAT4" => row
-                                                .try_get::<f32, _>(i)
-                                                .map(|v| v.to_string())
-                                                .unwrap_or_else(|_| "NULL".to_string()),
-                                            "FLOAT8" => row
-                                                .try_get::<f64, _>(i)
-                                                .map(|v| v.to_string())
-                                                .unwrap_or_else(|_| "NULL".to_string()),
-                                            "NUMERIC" => {
-                                                // Handle DECIMAL/NUMERIC types using rust_decimal
-                                                row.try_get::<rust_decimal::Decimal, _>(i)
-                                                    .map(|v| v.to_string())
-                                                    .unwrap_or_else(|_| {
-                                                        // Fallback to string if decimal parsing fails
-                                                        row.try_get::<String, _>(i)
-                                                            .unwrap_or_else(|_| "NULL".to_string())
-                                                    })
-                                            }
-                                            "MONEY" => {
-                                                // PostgreSQL MONEY type - try to get as string first
-                                                row.try_get::<String, _>(i)
-                                                    .unwrap_or_else(|_| "NULL".to_string())
-                                            }
-                                            "DATE" | "TIME" | "TIMESTAMP" | "TIMESTAMPTZ"
-                                            | "TIMETZ" => {
-                                                // Date/time types - get as string
-                                                row.try_get::<String, _>(i)
-                                                    .unwrap_or_else(|_| "NULL".to_string())
-                                            }
-                                            "UUID" => {
-                                                // UUID type - try to get as string
-                                                row.try_get::<String, _>(i)
-                                                    .unwrap_or_else(|_| "NULL".to_string())
-                                            }
-                                            "JSON" | "JSONB" => {
-                                                // JSON types - get as string
-                                                row.try_get::<String, _>(i)
-                                                    .unwrap_or_else(|_| "NULL".to_string())
-                                            }
-                                            "BYTEA" => {
-                                                // Binary data - show as hex or placeholder
-                                                match row.try_get::<Vec<u8>, _>(i) {
-                                                    Ok(bytes) => format!(
-                                                        "\\x{}",
-                                                        hex::encode(&bytes[..bytes.len().min(16)])
-                                                    ),
-                                                    Err(_) => "BINARY".to_string(),
-                                                }
-                                            }
-                                            _ => {
-                                                // Default case - try to get as string
-                                                row.try_get::<String, _>(i)
-                                                    .unwrap_or_else(|_| "NULL".to_string())
-                                            }
-                                        }
-                                    }
-                                }
-                                Err(_) => "ERROR".to_string(),
-                            };
-                            string_row.push(value);
-                        }
-                        result_rows.push(string_row);
-                    }
-
-                    QueryExecutionResult::Select(QueryResult {
-                        columns,
-                        rows: result_rows,
-                        row_count: rows.len(),
-                        execution_time_ms: execution_time,
-                    })
-                }
-                Err(e) => QueryExecutionResult::Error(format!("Query failed: {}", e)),
-            }
-        } else {
-            // This is an INSERT, UPDATE, DELETE, or other non-SELECT statement
-            match sqlx::query(sql).execute(pool).await {
-                Ok(result) => {
-                    let execution_time = start_time.elapsed().as_millis();
-                    QueryExecutionResult::Modified {
-                        rows_affected: result.rows_affected(),
-                        execution_time_ms: execution_time,
-                    }
-                }
-                Err(e) => QueryExecutionResult::Error(format!("Query failed: {}", e)),
-            }
-        }
-    }
-
     #[allow(dead_code)]
     pub async fn test_connection(&self) -> Result<bool> {
         let pool_guard = self.pool.read().await;
@@ -805,5 +659,297 @@ impl DatabaseManager {
 
         let _: (i32,) = sqlx::query_as("SELECT 1").fetch_one(pool).await?;
         Ok(true)
+    }
+
+    fn is_select_query(sql: &str) -> bool {
+        let lower = sql.to_lowercase();
+        let trimmed = lower.trim_start();
+        trimmed.starts_with("select") || trimmed.starts_with("with")
+    }
+
+    async fn execute_modification_query(
+        &self,
+        sql: &str,
+        pool: &PgPool,
+    ) -> EnhancedQueryExecutionResult {
+        let start_time = std::time::Instant::now();
+        match sqlx::query(sql).execute(pool).await {
+            Ok(result) => {
+                let execution_time = start_time.elapsed().as_millis();
+                EnhancedQueryExecutionResult::Modified {
+                    rows_affected: result.rows_affected(),
+                    execution_time_ms: execution_time,
+                }
+            }
+            Err(e) => EnhancedQueryExecutionResult::Error(format!("Query failed: {}", e)),
+        }
+    }
+
+    async fn fetch_table_name(oid: Oid, pool: &PgPool) -> Option<String> {
+        let query = r#"
+                SELECT n.nspname || '.' || c.relname as full_name
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE c.oid = $1
+            "#;
+
+        sqlx::query(query)
+            .bind(&oid)
+            .fetch_one(pool)
+            .await
+            .ok()?
+            .try_get::<String, _>(0)
+            .ok()
+    }
+
+    async fn fetch_nullable_info(
+        oid: Oid,
+        pool: &PgPool,
+    ) -> Result<Vec<(String, bool)>, sqlx::Error> {
+        let query = r#"
+                SELECT attname, NOT attnotnull as is_nullable
+                FROM pg_attribute
+                WHERE attrelid = $1
+                AND attnum > 0
+                AND NOT attisdropped
+            "#;
+
+        let rows = sqlx::query(query).bind(&oid).fetch_all(pool).await?;
+
+        Ok(rows
+            .iter()
+            .filter_map(
+                |row| match (row.try_get::<String, _>(0), row.try_get::<bool, _>(1)) {
+                    (Ok(col_name), Ok(is_nullable)) => Some((col_name, is_nullable)),
+                    _ => None,
+                },
+            )
+            .collect())
+    }
+
+    async fn fetch_table_metadata(&self, rows: &[PgRow], pool: &PgPool) -> TableMetadata {
+        let mut relation_oids = HashSet::new();
+
+        for col in rows[0].columns() {
+            if let Some(oid) = col.relation_id() {
+                relation_oids.insert(oid);
+            }
+        }
+
+        let mut oid_to_table_name: HashMap<Oid, String> = HashMap::new();
+        let mut column_nullable_map: HashMap<(Oid, String), bool> = HashMap::new();
+
+        for oid in relation_oids {
+            if let Some(table_name) = Self::fetch_table_name(oid, pool).await {
+                oid_to_table_name.insert(oid, table_name);
+            }
+
+            if let Ok(nullable_info) = Self::fetch_nullable_info(oid, pool).await {
+                for (col_name, is_nullable) in nullable_info {
+                    column_nullable_map.insert((oid, col_name), is_nullable);
+                }
+            }
+        }
+
+        TableMetadata {
+            oid_to_table_name,
+            column_nullable_map,
+        }
+    }
+
+    fn build_column_metadata(
+        first_row: &PgRow,
+        metadata: &TableMetadata,
+    ) -> Vec<ResultColumnMetadata> {
+        first_row
+            .columns()
+            .iter()
+            .enumerate()
+            .map(|(ordinal, col)| {
+                let table_name = col
+                    .relation_id()
+                    .and_then(|oid| metadata.oid_to_table_name.get(&oid).cloned());
+
+                let is_nullable = col.relation_id().and_then(|oid| {
+                    metadata
+                        .column_nullable_map
+                        .get(&(oid, col.name().to_string()))
+                        .copied()
+                });
+
+                ResultColumnMetadata {
+                    name: col.name().to_string(),
+                    type_name: col.type_info().name().to_string(),
+                    ordinal,
+                    table_name,
+                    is_nullable,
+                }
+            })
+            .collect()
+    }
+
+    fn convert_rows(rows: &[PgRow], metadata: &TableMetadata) -> Vec<ResultRow> {
+        rows.iter()
+            .map(|row| Self::convert_row(row, metadata))
+            .collect()
+    }
+
+    fn convert_row(row: &PgRow, metadata: &TableMetadata) -> ResultRow {
+        let cells = row
+            .columns()
+            .iter()
+            .enumerate()
+            .map(|(i, column)| Self::convert_cell(row, column, i, metadata))
+            .collect();
+
+        ResultRow { cells }
+    }
+
+    fn build_cell_column_metadata(
+        column: &PgColumn,
+        ordinal: usize,
+        metadata: &TableMetadata,
+    ) -> ResultColumnMetadata {
+        let table_name = column
+            .relation_id()
+            .and_then(|oid| metadata.oid_to_table_name.get(&oid).cloned());
+
+        let is_nullable = column.relation_id().and_then(|oid| {
+            metadata
+                .column_nullable_map
+                .get(&(oid, column.name().to_string()))
+                .copied()
+        });
+
+        ResultColumnMetadata {
+            name: column.name().to_string(),
+            type_name: column.type_info().name().to_string(),
+            ordinal,
+            table_name,
+            is_nullable,
+        }
+    }
+
+    fn decode_cell_value(row: &PgRow, column: &PgColumn, index: usize) -> (String, bool) {
+        // Try to decode as String first - Postgres can convert most types to text
+        if let Ok(v) = row.try_get::<String, _>(index) {
+            return (v, false);
+        }
+
+        // If string decoding fails, try type-specific decoding
+        match column.type_info().name() {
+            "BOOL" => row
+                .try_get::<bool, _>(index)
+                .map(|v| (v.to_string(), false))
+                .unwrap_or_else(|_| ("NULL".to_string(), true)),
+            "INT2" | "INT4" => row
+                .try_get::<i32, _>(index)
+                .map(|v| (v.to_string(), false))
+                .unwrap_or_else(|_| ("NULL".to_string(), true)),
+            "INT8" => row
+                .try_get::<i64, _>(index)
+                .map(|v| (v.to_string(), false))
+                .unwrap_or_else(|_| ("NULL".to_string(), true)),
+            "FLOAT4" => row
+                .try_get::<f32, _>(index)
+                .map(|v| (v.to_string(), false))
+                .unwrap_or_else(|_| ("NULL".to_string(), true)),
+            "FLOAT8" => row
+                .try_get::<f64, _>(index)
+                .map(|v| (v.to_string(), false))
+                .unwrap_or_else(|_| ("NULL".to_string(), true)),
+            "NUMERIC" => row
+                .try_get::<rust_decimal::Decimal, _>(index)
+                .map(|v| (v.to_string(), false))
+                .unwrap_or_else(|_| ("NULL".to_string(), true)),
+            _ => ("NULL".to_string(), true),
+        }
+    }
+
+    fn extract_cell_value(row: &PgRow, column: &PgColumn, index: usize) -> (String, bool) {
+        match row.try_get_raw(index) {
+            Ok(raw_value) if raw_value.is_null() => ("NULL".to_string(), true),
+            Ok(_) => Self::decode_cell_value(row, column, index),
+            Err(_) => ("ERROR".to_string(), false),
+        }
+    }
+
+    fn convert_cell(
+        row: &PgRow,
+        column: &PgColumn,
+        index: usize,
+        metadata: &TableMetadata,
+    ) -> ResultCell {
+        let column_metadata = Self::build_cell_column_metadata(column, index, metadata);
+        let (value, is_null) = Self::extract_cell_value(row, column, index);
+
+        ResultCell {
+            value,
+            is_null,
+            column_metadata,
+        }
+    }
+
+    async fn execute_select_query(&self, sql: &str, pool: &PgPool) -> EnhancedQueryExecutionResult {
+        let q = sqlx::query(sql);
+        self.execute_base_query(q, pool).await
+    }
+
+    async fn execute_base_query(
+        &self,
+        query: Query<'_, sqlx::Postgres, sqlx::postgres::PgArguments>,
+        pool: &PgPool,
+    ) -> EnhancedQueryExecutionResult {
+        let start_time = std::time::Instant::now();
+        match query.fetch_all(pool).await {
+            Ok(rows) => {
+                let execution_time = start_time.elapsed().as_millis();
+
+                if rows.is_empty() {
+                    return EnhancedQueryExecutionResult::Select(EnhancedQueryResult {
+                        columns: vec![],
+                        rows: vec![],
+                        row_count: 0,
+                        execution_time_ms: execution_time,
+                    });
+                }
+
+                let metadata = self.fetch_table_metadata(&rows, pool).await;
+                let columns = Self::build_column_metadata(&rows[0], &metadata);
+                let result_rows = Self::convert_rows(&rows, &metadata);
+
+                EnhancedQueryExecutionResult::Select(EnhancedQueryResult {
+                    columns,
+                    rows: result_rows,
+                    row_count: rows.len(),
+                    execution_time_ms: execution_time,
+                })
+            }
+            Err(e) => EnhancedQueryExecutionResult::Error(format!("Query failed: {}", e)),
+        }
+    }
+
+    pub async fn execute_query_enhanced(&self, sql: &str) -> EnhancedQueryExecutionResult {
+        let pool_guard = match self.pool.read().await {
+            pool => pool,
+        };
+
+        let pool = match pool_guard.as_ref() {
+            Some(pool) => pool,
+            None => {
+                return EnhancedQueryExecutionResult::Error("Database not connected".to_string());
+            }
+        };
+
+        let sql = sql.trim();
+        if sql.is_empty() {
+            return EnhancedQueryExecutionResult::Error("Empty query".to_string());
+        }
+
+        if Self::is_select_query(sql) {
+            self.execute_select_query(sql, pool).await
+        } else {
+            self.execute_modification_query(sql, pool).await
+        }
     }
 }

@@ -1,9 +1,9 @@
-use std::{ops::Range, time::Duration};
+use std::ops::Range;
 
-use crate::services::{QueryExecutionResult, QueryResult};
+use crate::services::{EnhancedQueryExecutionResult, EnhancedQueryResult, ResultCell};
 use gpui::*;
 use gpui_component::{
-    ActiveTheme as _, Size, StyleSized, h_flex,
+    ActiveTheme as _, Size, h_flex,
     label::Label,
     table::{Column, Table, TableDelegate, TableState},
     v_flex,
@@ -11,26 +11,25 @@ use gpui_component::{
 use serde::Deserialize;
 
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
-#[action(namespace = results_panel, no_json)]
+#[action(namespace = enhanced_results_panel, no_json)]
 struct ChangeSize(Size);
 
-pub struct ResultsPanel {
-    current_result: Option<QueryExecutionResult>,
-    table: Entity<TableState<ResultsTableDelegate>>,
+pub struct EnhancedResultsPanel {
+    current_result: Option<EnhancedQueryExecutionResult>,
+    table: Entity<TableState<EnhancedResultsTableDelegate>>,
 }
 
-struct ResultsTableDelegate {
+struct EnhancedResultsTableDelegate {
     columns: Vec<Column>,
-    rows: Vec<Vec<String>>,
-    size: Size,
+    // Store the full ResultCell data with metadata
+    rows: Vec<Vec<ResultCell>>,
     loading: bool,
     visible_rows: Range<usize>,
 }
 
-impl ResultsTableDelegate {
+impl EnhancedResultsTableDelegate {
     fn new() -> Self {
         Self {
-            size: Size::default(),
             rows: vec![],
             columns: vec![],
             loading: false,
@@ -38,19 +37,31 @@ impl ResultsTableDelegate {
         }
     }
 
-    pub fn update(&mut self, result: QueryResult) {
-        self.rows = result.rows.clone();
+    pub fn update(&mut self, result: EnhancedQueryResult) {
+        // Convert ResultRows to Vec<Vec<ResultCell>>
+        let rows: Vec<Vec<ResultCell>> = result
+            .rows
+            .clone()
+            .iter()
+            .map(|row| row.cells.clone())
+            .collect();
+
+        // Create columns from metadata
         let columns: Vec<Column> = result
             .columns
             .clone()
             .iter()
-            .map(|c| Column::new(c, c)) // TODO: Create pretty column name
+            .map(|col_meta| {
+                Column::new(&col_meta.name, &col_meta.name).sortable() // Enable sorting for all columns
+            })
             .collect();
+
+        self.rows = rows;
         self.columns = columns;
     }
 }
 
-impl TableDelegate for ResultsTableDelegate {
+impl TableDelegate for EnhancedResultsTableDelegate {
     fn columns_count(&self, _: &App) -> usize {
         self.columns.len()
     }
@@ -64,21 +75,46 @@ impl TableDelegate for ResultsTableDelegate {
     }
 
     fn render_th(&self, col_ix: usize, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let th = div().child(format!("{}", self.column(col_ix, cx).name));
+        let col = self.column(col_ix, cx);
+        div().child(format!("{}", col.clone().name))
+        // let col_meta = if !self.rows.is_empty() && col_ix < self.rows[0].len() {
+        //     Some(&self.rows[0][col_ix].column_metadata)
+        // } else {
+        //     None
+        // };
 
-        if col_ix >= 3 && col_ix <= 10 {
-            th.table_cell_size(self.size)
-        } else {
-            th
-        }
+        // let mut th = div();
+
+        // if let Some(meta) = col_meta {
+        //     // Show column name and type
+        //     th = th.child(
+        //         v_flex()
+        //             .gap_1()
+        //             .child(
+        //                 Label::new(&meta.name)
+        //                     .text_sm()
+        //                     .text_color(cx.theme().foreground),
+        //             )
+        //             .child(
+        //                 Label::new(&meta.type_name)
+        //                     .text_xs()
+        //                     .text_color(cx.theme().muted_foreground),
+        //             ),
+        //     );
+        // } else {
+        //     th = th.child(format!("{}", col.name));
+        // }
+
+        // th
     }
 
     fn render_tr(&self, row_ix: usize, _: &mut Window, _cx: &mut App) -> gpui::Stateful<gpui::Div> {
-        div().id(row_ix).on_click(|ev: &ClickEvent, _, _| {
+        div().id(row_ix).on_click(move |ev: &ClickEvent, _, _| {
             println!(
-                "You have clicked row with secondary: {}",
+                "You have clicked row {} with secondary: {}",
+                row_ix,
                 ev.modifiers().secondary()
-            )
+            );
         })
     }
 
@@ -87,11 +123,38 @@ impl TableDelegate for ResultsTableDelegate {
         row_ix: usize,
         col_ix: usize,
         _: &mut Window,
-        _: &mut App,
+        cx: &mut App,
     ) -> impl IntoElement {
+        // println!("render_td called: row={}, col={}", row_ix, col_ix);
+        // Don't clone all rows - access directly instead
         if let Some(row) = self.rows.get(row_ix) {
-            if let Some(cell_value) = row.get(col_ix) {
-                return cell_value.clone().into_any_element();
+            if let Some(cell) = row.get(col_ix) {
+                // Only clone the specific cell we need for the closure
+                let cell_clone = cell.clone();
+                // Create a clickable cell that logs metadata on click
+                return div()
+                    .cursor_pointer()
+                    .on_mouse_up(MouseButton::Left, move |_ev, _, _| {
+                        // Log all the metadata for this cell
+                        println!("\n=== CELL METADATA ===");
+                        println!("Column Name: {}", cell_clone.column_metadata.name);
+                        println!("Column Type: {}", cell_clone.column_metadata.type_name);
+                        println!("Column Ordinal: {}", cell_clone.column_metadata.ordinal);
+                        println!("Table Name: {:?}", cell_clone.column_metadata.table_name);
+                        println!("Is Nullable: {:?}", cell_clone.column_metadata.is_nullable);
+                        println!("Value: {}", cell_clone.value);
+                        println!("Is NULL: {}", cell_clone.is_null);
+                        println!("====================\n");
+                    })
+                    .child(if cell.is_null {
+                        // Style NULL values differently
+                        Label::new(&cell.value)
+                            .text_color(cx.theme().muted_foreground)
+                            .italic()
+                    } else {
+                        Label::new(&cell.value)
+                    })
+                    .into_any_element();
             }
         }
 
@@ -107,29 +170,37 @@ impl TableDelegate for ResultsTableDelegate {
     ) {
         let col = self.columns.remove(col_ix);
         self.columns.insert(to_ix, col);
+
+        // Also move the cells in each row
+        for row in &mut self.rows {
+            if col_ix < row.len() && to_ix < row.len() {
+                let cell = row.remove(col_ix);
+                row.insert(to_ix, cell);
+            }
+        }
     }
 
     fn loading(&self, _: &App) -> bool {
-        false
+        self.loading
     }
 
     fn load_more_threshold(&self) -> usize {
         150
     }
 
-    fn load_more(&mut self, _: &mut Window, cx: &mut Context<TableState<Self>>) {
-        self.loading = true;
-        cx.spawn(async move |view, cx| {
-            // Simulate network request, delay 1s to load data.
-            Timer::after(Duration::from_secs(1)).await;
-            cx.update(|cx| {
-                let _ = view.update(cx, |view, _| {
-                    view.delegate_mut().loading = false;
-                });
-            })
-        })
-        .detach();
-    }
+    // fn load_more(&mut self, _: &mut Window, cx: &mut Context<TableState<Self>>) {
+    //     self.loading = true;
+    //     cx.spawn(async move |view, cx| {
+    //         // Simulate network request
+    //         Timer::after(Duration::from_secs(1)).await;
+    //         cx.update(|cx| {
+    //             let _ = view.update(cx, |view, _| {
+    //                 view.delegate_mut().loading = false;
+    //             });
+    //         })
+    //     })
+    //     .detach();
+    // }
 
     fn visible_rows_changed(
         &mut self,
@@ -141,10 +212,10 @@ impl TableDelegate for ResultsTableDelegate {
     }
 }
 
-impl ResultsPanel {
+impl EnhancedResultsPanel {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let delegate = ResultsTableDelegate::new();
-        let table = cx.new(|cx| TableState::new(delegate, window, cx));
+        let delegate = EnhancedResultsTableDelegate::new();
+        let table = cx.new(|cx| TableState::new(delegate, window, cx).sortable(false));
 
         Self {
             current_result: None,
@@ -156,9 +227,9 @@ impl ResultsPanel {
         cx.new(|cx| Self::new(window, cx))
     }
 
-    pub fn update_result(&mut self, result: QueryExecutionResult, cx: &mut Context<Self>) {
+    pub fn update_result(&mut self, result: EnhancedQueryExecutionResult, cx: &mut Context<Self>) {
         self.current_result = Some(result.clone());
-        if let QueryExecutionResult::Select(x) = result {
+        if let EnhancedQueryExecutionResult::Select(x) = result {
             self.table.update(cx, |table, cx| {
                 table.delegate_mut().update(x.clone());
                 table.refresh(cx);
@@ -168,14 +239,14 @@ impl ResultsPanel {
     }
 }
 
-impl Render for ResultsPanel {
+impl Render for EnhancedResultsPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         match &self.current_result {
-            Some(QueryExecutionResult::Select(_result)) => v_flex()
+            Some(EnhancedQueryExecutionResult::Select(_result)) => v_flex()
                 .size_full()
                 .p_4()
                 .child(Table::new(&self.table.clone()).stripe(true)),
-            Some(QueryExecutionResult::Modified {
+            Some(EnhancedQueryExecutionResult::Modified {
                 rows_affected,
                 execution_time_ms,
             }) => h_flex().size_full().items_center().justify_center().child(
@@ -186,7 +257,7 @@ impl Render for ResultsPanel {
                 .text_sm()
                 .text_color(cx.theme().accent_foreground),
             ),
-            Some(QueryExecutionResult::Error(error)) => v_flex().size_full().p_4().child(
+            Some(EnhancedQueryExecutionResult::Error(error)) => v_flex().size_full().p_4().child(
                 div()
                     .p_4()
                     .bg(cx.theme().danger)

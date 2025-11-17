@@ -1,6 +1,6 @@
 use gpui::{prelude::FluentBuilder as _, *};
 use gpui_component::{
-    ActiveTheme as _, Icon, Sizable as _, StyledExt,
+    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt,
     button::{Button, ButtonVariants as _},
     label::Label,
     list::{List, ListEvent, ListState},
@@ -12,6 +12,8 @@ use crate::{
     state::ConnectionState,
     workspace::connections::{ConnectionForm, ConnectionListDelegate},
 };
+
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct ConnectionManager {
     is_creating: bool,
@@ -248,7 +250,23 @@ impl Render for ConnectionManager {
             })
             .when(show_form, |d| d.child(self.connection_form.clone()))
             .when(show_wecome, |d| {
-                d.child("Welcome, please create or select a connection.")
+                let version = div()
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .justify_center()
+                    .gap_1()
+                    .text_xs()
+                    .opacity(0.6)
+                    .child(format!("Version: {}", VERSION))
+                    .child(Icon::new(IconName::Heart).xsmall());
+
+                d.flex()
+                    .items_center()
+                    .justify_center()
+                    .child(div().text_lg().child("PGUI"))
+                    .child("Create or select a connection")
+                    .child(version)
             });
 
         div().flex().size_full().child(sidebar).child(main)

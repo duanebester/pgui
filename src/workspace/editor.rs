@@ -1,10 +1,7 @@
 use std::rc::Rc;
 
-use crate::{
-    services::{ConnectionInfo, LspStore},
-    state::{ConnectionState, EditorState},
-};
-use gpui::{prelude::FluentBuilder as _, *};
+use crate::{services::LspStore, state::EditorState};
+use gpui::*;
 use gpui_component::{
     ActiveTheme as _, Disableable as _, Icon, Sizable as _,
     button::{Button, ButtonVariants as _},
@@ -22,7 +19,6 @@ pub enum EditorEvent {
 impl EventEmitter<EditorEvent> for Editor {}
 
 pub struct Editor {
-    active_connection: Option<ConnectionInfo>,
     input_state: Entity<InputState>,
     _subscribes: Vec<Subscription>,
     lsp_store: LspStore,
@@ -51,11 +47,11 @@ impl Editor {
         });
 
         let _subscribes = vec![
-            cx.observe_global::<ConnectionState>(move |this, cx| {
-                let state = cx.global::<ConnectionState>();
-                this.active_connection = state.active_connection.clone();
-                cx.notify();
-            }),
+            // cx.observe_global::<ConnectionState>(move |this, cx| {
+            //     let state = cx.global::<ConnectionState>();
+            //     this.active_connection = state.active_connection.clone();
+            //     cx.notify();
+            // }),
             cx.observe_global::<EditorState>(move |this, cx| {
                 let tables = cx.global::<EditorState>().tables.clone();
                 let completions = tables
@@ -80,7 +76,6 @@ impl Editor {
         Self {
             input_state,
             lsp_store,
-            active_connection: None,
             is_executing: false,
             is_formatting: false,
             _subscribes,
@@ -146,55 +141,33 @@ impl Render for Editor {
             .disabled(self.is_formatting)
             .on_click(cx.listener(Self::format_query));
 
-        let connection_name = self.active_connection.clone().map(|x| x.name.clone());
-        let disconnect_button = Button::new("disconnect_button")
-            .icon(Icon::empty().path("icons/plug-zap.svg"))
-            .small()
-            .danger()
-            .ghost()
-            .tooltip("Disconnect")
-            .on_click(|_evt, _win, cx| ConnectionState::disconnect(cx));
-
         let toolbar = h_flex()
             .id("editor-toolbar")
-            .bg(cx.theme().table_head)
-            .border_b_1()
-            .border_color(cx.theme().border)
-            .justify_between()
+            .justify_end()
             .items_center()
-            .py_1()
+            .pb_2()
             .px_2()
-            .when(connection_name.is_some(), |d| {
-                d.child(
-                    div()
-                        .flex()
-                        .justify_center()
-                        .items_center()
-                        .gap_1()
-                        .text_color(cx.theme().accent_foreground)
-                        .text_xs()
-                        .child(format!("Connected to {}", connection_name.unwrap()))
-                        .child(disconnect_button),
-                )
-            })
             .child(
                 h_flex()
-                    .gap_2()
+                    .gap_1()
                     .items_center()
                     .child(format_button)
                     .child(execute_button),
             );
 
-        v_flex().size_full().child(toolbar).child(
-            div()
-                .id("editor-content")
-                .bg(cx.theme().background)
-                .w_full()
-                .flex_1()
-                .p_2()
-                .font_family("Monaco")
-                .text_size(px(12.))
-                .child(Input::new(&self.input_state).h_full()),
-        )
+        v_flex()
+            .size_full()
+            .child(
+                div()
+                    .id("editor-content")
+                    .bg(cx.theme().background)
+                    .w_full()
+                    .flex_1()
+                    .p_2()
+                    .font_family("Monaco")
+                    .text_size(px(12.))
+                    .child(Input::new(&self.input_state).h_full()),
+            )
+            .child(toolbar)
     }
 }

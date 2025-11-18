@@ -1,6 +1,7 @@
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 use gpui_component::button::{Button, ButtonVariants as _};
+use gpui_component::label::Label;
 use gpui_component::{ActiveTheme, Icon, Selectable as _, Sizable as _};
 
 use crate::services::ConnectionInfo;
@@ -59,6 +60,33 @@ impl Render for FooterBar {
                 cx.notify();
             }));
 
+        let connection_url = self
+            .active_connection
+            .clone()
+            .map(|x| format!("{}@{}:{}", x.username, x.hostname, x.port));
+
+        let _connection_status = div()
+            .flex()
+            .items_center()
+            .justify_center()
+            .gap_1()
+            .pr_1()
+            .when(connection_url.clone().is_some(), |d| {
+                d.child(
+                    Label::new(connection_url.clone().unwrap())
+                        .italic()
+                        .text_xs(),
+                )
+                .child(Icon::empty().path("icons/power.svg"))
+                .text_color(cx.theme().primary)
+            })
+            .when(connection_url.is_none(), |d| {
+                d.child(Label::new("Disconnected").italic().text_xs())
+                    .child(Icon::empty().path("icons/power.svg"))
+                    .text_color(cx.theme().foreground)
+                    .opacity(0.6)
+            });
+
         let controls = div()
             .flex()
             .flex_row()
@@ -80,6 +108,7 @@ impl Render for FooterBar {
             .py_1()
             .px_2()
             .child(controls);
+        // .child(connection_status);
 
         footer
     }

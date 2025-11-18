@@ -10,8 +10,10 @@ Connections will be saved to a sqlite db file in `~/.pgui/connections.db`
 
 Passwords are saved in the host OS secure store via Keyring.rs.
 
-As of 2025-11-17:
+As of 2025-11-18:
 
-![screengrab](./assets/screenshots/2025-11-17.png)
+![screengrab-dark](./assets/screenshots/2025-11-18-dark.png)
+
+![screengrab-light](./assets/screenshots/2025-11-18-light.png)
 
 See [Mac App Build](./MAC_APP_BUILD.md) for building locally on MacOS

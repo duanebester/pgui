@@ -217,7 +217,7 @@ impl DatabaseManager {
             SELECT datname
             FROM pg_database
             WHERE datistemplate = false
-            AND datname != 'postgres'
+            -- AND datname != 'postgres'
             ORDER BY datname
         "#;
 

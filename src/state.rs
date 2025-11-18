@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use gpui::*;
 
-use crate::services::{ConnectionInfo, ConnectionsStore, DatabaseManager, TableInfo};
+use crate::services::{ConnectionInfo, ConnectionsStore, DatabaseInfo, DatabaseManager, TableInfo};
 
 #[derive(Clone, PartialEq)]
 pub enum ConnectionStatus {
@@ -34,6 +34,19 @@ impl Global for EditorState {}
 impl EditorState {
     pub fn init(cx: &mut App) {
         let this = EditorState { tables: vec![] };
+        cx.set_global(this);
+    }
+}
+
+pub struct DatabaseState {
+    pub databases: Vec<DatabaseInfo>,
+}
+
+impl Global for DatabaseState {}
+
+impl DatabaseState {
+    pub fn init(cx: &mut App) {
+        let this = DatabaseState { databases: vec![] };
         cx.set_global(this);
     }
 }
@@ -73,87 +86,41 @@ impl ConnectionState {
         let _ = cx.update_global::<ConnectionState, _>(|state, _cx| {
             state.connection_state = ConnectionStatus::Connecting;
         });
-        let mut cic = connection_info.clone();
+        let cic = connection_info.clone();
         let app_state = cx.global::<ConnectionState>();
         let db_manager = app_state.db_manager.clone();
-        cx.spawn(async move |cx| {
-            // Load password from keychain on-demand
-            if let Ok(password) = ConnectionsStore::get_connection_password(&cic.id) {
-                cic.password = password;
-            } else {
-                let _ = cx.update_global::<ConnectionState, _>(|state, _cx| {
-                    state.connection_state = ConnectionStatus::Disconnected;
-                });
-                return;
-            }
-
-            // Use secure connection options instead of string
-            let connect_options = cic.to_pg_connect_options();
-
-            if let Ok(_) = db_manager.connect_with_options(connect_options).await {
-                let _ = cx.update_global::<ConnectionState, _>(|state, _cx| {
-                    state.active_connection = Some(cic);
-                    state.connection_state = ConnectionStatus::Connected;
-                });
-
-                if let Ok(schema) = db_manager.get_schema(None).await {
-                    let llm_schema = Some(db_manager.format_schema_for_llm(&schema).into());
-                    let _ = cx.update_global::<LLMState, _>(|state, _cx| {
-                        state.llm_schema = llm_schema;
-                    });
-                }
-
-                if let Ok(tables) = db_manager.get_tables().await {
-                    let _ = cx.update_global::<EditorState, _>(|state, _cx| {
-                        state.tables = tables;
-                    });
-                }
-
-                loop {
-                    let mut connected = db_manager.is_connected().await;
-                    if !connected {
-                        let _ = cx.update_global::<ConnectionState, _>(|state, _cx| {
-                            state.active_connection = None;
-                            state.connection_state = ConnectionStatus::Disconnected;
-                        });
-                        break;
-                    }
-
-                    let _ = cx.try_read_global::<ConnectionState, _>(|state, _cx| {
-                        if state.active_connection.is_none() {
-                            connected = false;
-                        }
-                    });
-
-                    cx.background_executor()
-                        .timer(Duration::from_millis(1000))
-                        .await;
-                }
-            }
-        })
-        .detach();
+        cx.spawn(async move |cx| connect_async(cic, db_manager, cx).await)
+            .detach();
     }
 
     pub fn disconnect(cx: &mut App) {
         let app_state = cx.global::<ConnectionState>();
         let db_manager = app_state.db_manager.clone();
-        cx.spawn(async move |cx| {
-            let _ = cx.update_global::<ConnectionState, _>(|state, _cx| {
-                state.connection_state = ConnectionStatus::Disconnecting;
-            });
-            if let Ok(_) = db_manager.disconnect().await {
-                let _ = cx.update_global::<ConnectionState, _>(|state, _cx| {
-                    // TODO: default blank state?
-                    state.active_connection = None;
-                    state.connection_state = ConnectionStatus::Disconnected;
-                });
-                let _ = cx.update_global::<LLMState, _>(|state, _cx| {
-                    // TODO: default blank state?
-                    state.llm_schema = None;
-                });
-            }
-        })
-        .detach();
+        cx.spawn(async move |cx| disconnect_async(db_manager, cx).await)
+            .detach();
+    }
+
+    pub fn change_database(database_name: String, cx: &mut App) {
+        // Get the current connection info
+        let current_connection = cx.global::<ConnectionState>().active_connection.clone();
+
+        if let Some(mut new_connection) = current_connection {
+            // Update the database field
+            new_connection.database = database_name;
+
+            // Disconnect from the current database first
+            let db_manager = cx.global::<ConnectionState>().db_manager.clone();
+            cx.spawn(async move |cx| {
+                disconnect_async(db_manager.clone(), cx).await;
+                // Wait a brief moment for cleanup
+                cx.background_executor()
+                    .timer(Duration::from_millis(100))
+                    .await;
+                // Connect to the new database
+                connect_async(new_connection, db_manager, cx).await;
+            })
+            .detach();
+        }
     }
 
     pub fn delete_connection(connection: ConnectionInfo, cx: &mut App) {
@@ -205,8 +172,89 @@ impl ConnectionState {
     }
 }
 
+async fn connect_async(mut cic: ConnectionInfo, db_manager: DatabaseManager, cx: &mut AsyncApp) {
+    // Load password from keychain on-demand
+    if let Ok(password) = ConnectionsStore::get_connection_password(&cic.id) {
+        cic.password = password;
+    } else {
+        let _ = cx.update_global::<ConnectionState, _>(|state, _cx| {
+            state.connection_state = ConnectionStatus::Disconnected;
+        });
+        return;
+    }
+
+    // Use secure connection options instead of string
+    let connect_options = cic.to_pg_connect_options();
+
+    if let Ok(_) = db_manager.connect_with_options(connect_options).await {
+        if let Ok(schema) = db_manager.get_schema(None).await {
+            let llm_schema = Some(db_manager.format_schema_for_llm(&schema).into());
+            let _ = cx.update_global::<LLMState, _>(|state, _cx| {
+                state.llm_schema = llm_schema;
+            });
+        }
+
+        if let Ok(tables) = db_manager.get_tables().await {
+            let _ = cx.update_global::<EditorState, _>(|state, _cx| {
+                state.tables = tables;
+            });
+        }
+
+        if let Ok(databases) = db_manager.get_databases().await {
+            let _ = cx.update_global::<DatabaseState, _>(|state, _cx| {
+                state.databases = databases;
+            });
+        }
+
+        let _ = cx.update_global::<ConnectionState, _>(|state, _cx| {
+            state.active_connection = Some(cic);
+            state.connection_state = ConnectionStatus::Connected;
+        });
+
+        loop {
+            let mut connected = db_manager.is_connected().await;
+            if !connected {
+                let _ = cx.update_global::<ConnectionState, _>(|state, _cx| {
+                    state.active_connection = None;
+                    state.connection_state = ConnectionStatus::Disconnected;
+                });
+                break;
+            }
+
+            let _ = cx.try_read_global::<ConnectionState, _>(|state, _cx| {
+                if state.active_connection.is_none() {
+                    connected = false;
+                }
+            });
+
+            cx.background_executor()
+                .timer(Duration::from_millis(1000))
+                .await;
+        }
+    }
+}
+
+async fn disconnect_async(db_manager: DatabaseManager, cx: &mut AsyncApp) {
+    let _ = cx.update_global::<ConnectionState, _>(|state, _cx| {
+        state.active_connection = None;
+        state.connection_state = ConnectionStatus::Disconnecting;
+    });
+    if let Ok(_) = db_manager.disconnect().await {
+        let _ = cx.update_global::<ConnectionState, _>(|state, _cx| {
+            // TODO: default blank state?
+            state.active_connection = None;
+            state.connection_state = ConnectionStatus::Disconnected;
+        });
+        let _ = cx.update_global::<LLMState, _>(|state, _cx| {
+            // TODO: default blank state?
+            state.llm_schema = None;
+        });
+    }
+}
+
 pub fn init(cx: &mut App) {
     ConnectionState::init(cx);
+    DatabaseState::init(cx);
     EditorState::init(cx);
     LLMState::init(cx);
 }

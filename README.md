@@ -1,6 +1,6 @@
 # PGUI
 
-A high performance GUI to query & manage postgres databases.
+A high performance GUI to query & manage postgresql databases.
 
 Written in [GPUI](https://gpui.rs) with [GPUI Component](https://github.com/longbridge/gpui-component)
 

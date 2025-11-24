@@ -1,11 +1,12 @@
 use anyhow::Result;
-use async_std::sync::RwLock;
+use async_lock::RwLock;
 use serde::{Deserialize, Serialize};
 use sqlx::{
     Column, PgPool, Row, TypeInfo, ValueRef,
     postgres::{PgColumn, PgConnectOptions, PgPoolOptions, PgRow, types::Oid},
     query::Query,
 };
+
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -159,10 +160,18 @@ impl DatabaseManager {
             .max_connections(5)
             .acquire_timeout(Duration::from_secs(5));
 
-        let pool = pool_opts.connect_with(options).await?;
+        let pool = pool_opts.connect_with(options).await;
 
-        let mut pool_guard = self.pool.write().await;
-        *pool_guard = Some(pool);
+        match pool {
+            Ok(p) => {
+                let mut pool_guard = self.pool.write().await;
+                *pool_guard = Some(p);
+            }
+            Err(e) => {
+                eprintln!("Error Connecting: {}", e)
+            }
+        };
+
         Ok(())
     }
 
@@ -673,6 +682,7 @@ impl DatabaseManager {
         pool: &PgPool,
     ) -> EnhancedQueryExecutionResult {
         let start_time = std::time::Instant::now();
+        // match sqlx::query(sqlx::AssertSqlSafe(sql)).execute(pool).await {
         match sqlx::query(sql).execute(pool).await {
             Ok(result) => {
                 let execution_time = start_time.elapsed().as_millis();
@@ -891,6 +901,7 @@ impl DatabaseManager {
     }
 
     async fn execute_select_query(&self, sql: &str, pool: &PgPool) -> EnhancedQueryExecutionResult {
+        // let q = sqlx::query(sqlx::AssertSqlSafe(sql));
         let q = sqlx::query(sql);
         self.execute_base_query(q, pool).await
     }

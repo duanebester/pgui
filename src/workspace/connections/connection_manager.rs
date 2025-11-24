@@ -140,7 +140,7 @@ impl Render for ConnectionManager {
         let sidebar = div()
             .id("connection-manager-sidebar")
             .flex()
-            .h_full()
+            .flex_1()
             .bg(cx.theme().sidebar)
             .border_color(cx.theme().border)
             .border_r_1()
@@ -269,6 +269,6 @@ impl Render for ConnectionManager {
                     .child(version)
             });
 
-        div().flex().size_full().child(sidebar).child(main)
+        div().flex().flex_1().child(sidebar).child(main)
     }
 }

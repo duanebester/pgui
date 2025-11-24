@@ -35,7 +35,7 @@ impl Editor {
             let mut i = InputState::new(window, cx)
                 .code_editor(default_language)
                 .line_number(true)
-                .indent_guides(true)
+                .indent_guides(false)
                 .tab_size(TabSize {
                     tab_size: 2,
                     hard_tabs: false,

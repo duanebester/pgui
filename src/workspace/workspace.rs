@@ -7,6 +7,7 @@ use super::tables_tree::{TableEvent, TablesTree};
 
 use crate::services::{EnhancedQueryExecutionResult, TableInfo};
 use crate::state::{ConnectionState, ConnectionStatus};
+use crate::workspace::agent_panel::AgentPanel;
 use crate::workspace::results_panel::EnhancedResultsPanel;
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
@@ -21,10 +22,12 @@ pub struct Workspace {
     footer_bar: Entity<FooterBar>,
     tables_tree: Entity<TablesTree>,
     editor: Entity<Editor>,
+    agent_panel: Entity<AgentPanel>,
     connection_manager: Entity<ConnectionManager>,
     enhanced_results: Entity<EnhancedResultsPanel>,
     _subscriptions: Vec<Subscription>,
     show_tables: bool,
+    show_agent: bool,
 }
 
 impl Workspace {
@@ -32,6 +35,7 @@ impl Workspace {
         let header_bar = HeaderBar::view(window, cx);
         let footer_bar = FooterBar::view(window, cx);
         let tables_tree = TablesTree::view(window, cx);
+        let agent_panel = AgentPanel::view(window, cx);
         let editor = Editor::view(window, cx);
         let enhanced_results = EnhancedResultsPanel::view(window, cx);
         let connection_manager = ConnectionManager::view(window, cx);
@@ -57,6 +61,12 @@ impl Workspace {
                     FooterBarEvent::ShowTables => {
                         this.show_tables = true;
                     }
+                    FooterBarEvent::HideAgent => {
+                        this.show_agent = false;
+                    }
+                    FooterBarEvent::ShowAgent => {
+                        this.show_agent = true;
+                    }
                 }
                 cx.notify();
             }),
@@ -68,10 +78,12 @@ impl Workspace {
             connection_manager,
             tables_tree,
             editor,
+            agent_panel,
             enhanced_results,
             _subscriptions,
             connection_state: ConnectionStatus::Disconnected,
             show_tables: true,
+            show_agent: false,
         }
     }
 
@@ -155,7 +167,7 @@ impl Workspace {
         let content = div()
             .id("connection-manager")
             .flex()
-            .flex_grow()
+            .flex_1()
             .bg(cx.theme().background)
             .child(self.connection_manager.clone());
 
@@ -166,20 +178,33 @@ impl Workspace {
         let sidebar = div()
             .id("connected-sidebar")
             .flex()
+            .flex_col()
             .h_full()
             .border_color(cx.theme().border)
             .border_r_1()
             .min_w(px(300.0))
             .child(self.tables_tree.clone());
 
+        let agent = div()
+            .id("connected-agent")
+            .flex()
+            .flex_col()
+            .h_full()
+            .w(px(400.))
+            .border_color(cx.theme().border)
+            .border_l_1()
+            .child(self.agent_panel.clone());
+
         let main = div()
             .id("connected-main")
             .flex()
             .flex_col()
+            .flex_1()
+            .h_full()
             .w_full()
             .overflow_hidden()
             .child(
-                v_resizable("resizable")
+                v_resizable("resizable-results")
                     .child(
                         resizable_panel()
                             .size(px(400.))
@@ -196,10 +221,13 @@ impl Workspace {
         let content = div()
             .id("connected-content")
             .flex()
-            .flex_grow()
+            .flex_row()
+            .flex_1()
+            .h_full()
             .bg(cx.theme().background)
             .when(self.show_tables.clone(), |d| d.child(sidebar))
-            .child(main);
+            .child(main)
+            .when(self.show_agent.clone(), |d| d.child(agent));
 
         content
     }

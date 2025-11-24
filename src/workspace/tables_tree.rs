@@ -272,7 +272,7 @@ impl Render for TablesTree {
         );
 
         v_flex()
-            .size_full()
+            .flex_1()
             .gap_2()
             .p_2()
             .on_action(cx.listener(Self::on_select_table_item))

@@ -1,3 +1,5 @@
+mod agent_handler;
+mod agent_panel;
 mod connections;
 mod editor;
 mod footer_bar;

@@ -219,7 +219,298 @@ INSERT INTO system_logs (log_level, message, module, user_id, ip_address) VALUES
   ('INFO', 'Product updated', 'products', 1, '192.168.1.100'),
   ('ERROR', 'Database connection timeout', 'database', NULL, NULL);
 
--- Create some indexes for better performance
+-- ============================================================================
+-- ADVANCED DATA TYPE TESTING TABLE
+-- This table contains various PostgreSQL data types for GUI testing
+-- ============================================================================
+
+-- Custom ENUM types
+CREATE TYPE priority_level AS ENUM ('low', 'medium', 'high', 'critical');
+CREATE TYPE task_status AS ENUM ('pending', 'in_progress', 'completed', 'cancelled');
+CREATE TYPE mood_rating AS ENUM ('😀', '😊', '😐', '😢', '😡');
+
+-- Composite type
+CREATE TYPE address_type AS (
+  street TEXT,
+  city TEXT,
+  state TEXT,
+  zip_code TEXT,
+  country TEXT
+);
+
+-- Advanced data types testing table
+CREATE TABLE advanced_types_test (
+  id SERIAL PRIMARY KEY,
+
+  -- Numeric types
+  tiny_int SMALLINT,
+  regular_int INTEGER,
+  big_int BIGINT,
+  decimal_val DECIMAL(10,2),
+  numeric_val NUMERIC(15,4),
+  real_val REAL,
+  double_val DOUBLE PRECISION,
+  serial_val SERIAL,
+  big_serial_val BIGSERIAL,
+
+  -- Monetary type
+  money_val MONEY,
+
+  -- Character types
+  char_fixed CHAR(10),
+  varchar_var VARCHAR(100),
+  text_unlimited TEXT,
+
+  -- Binary data
+  bytea_data BYTEA,
+
+  -- Date/Time types
+  date_val DATE,
+  time_val TIME,
+  time_tz_val TIME WITH TIME ZONE,
+  timestamp_val TIMESTAMP,
+  timestamp_tz_val TIMESTAMP WITH TIME ZONE,
+  interval_val INTERVAL,
+
+  -- Boolean
+  bool_val BOOLEAN,
+
+  -- Enumerated types
+  priority priority_level,
+  status task_status,
+  mood mood_rating,
+
+  -- Geometric types
+  point_val POINT,
+  line_val LINE,
+  lseg_val LSEG,
+  box_val BOX,
+  path_val PATH,
+  polygon_val POLYGON,
+  circle_val CIRCLE,
+
+  -- Network address types
+  inet_val INET,
+  cidr_val CIDR,
+  macaddr_val MACADDR,
+  macaddr8_val MACADDR8,
+
+  -- Bit string types
+  bit_val BIT(8),
+  bit_varying_val BIT VARYING(16),
+
+  -- Text search types
+  tsvector_val TSVECTOR,
+  tsquery_val TSQUERY,
+
+  -- UUID type
+  uuid_val UUID,
+
+  -- XML type
+  xml_val XML,
+
+  -- JSON types
+  json_val JSON,
+  jsonb_val JSONB,
+
+  -- Arrays
+  int_array INTEGER[],
+  text_array TEXT[],
+  multi_dim_array INTEGER[][],
+
+  -- Range types
+  int_range INT4RANGE,
+  bigint_range INT8RANGE,
+  numeric_range NUMRANGE,
+  timestamp_range TSRANGE,
+  timestamptz_range TSTZRANGE,
+  date_range DATERANGE,
+
+  -- Object identifier types
+  oid_val OID,
+  regclass_val REGCLASS,
+  regtype_val REGTYPE,
+  regproc_val REGPROC,
+
+  -- Composite type
+  address address_type,
+
+  -- pg_lsn (Log Sequence Number)
+  lsn_val PG_LSN,
+
+  -- Special types with NULL values for testing
+  nullable_int INTEGER,
+  nullable_text TEXT,
+  nullable_json JSONB,
+
+  -- Metadata
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  notes TEXT
+);
+
+-- Insert comprehensive test data
+INSERT INTO advanced_types_test (
+  tiny_int, regular_int, big_int, decimal_val, numeric_val, real_val, double_val,
+  money_val,
+  char_fixed, varchar_var, text_unlimited,
+  bytea_data,
+  date_val, time_val, time_tz_val, timestamp_val, timestamp_tz_val, interval_val,
+  bool_val,
+  priority, status, mood,
+  point_val, line_val, lseg_val, box_val, path_val, polygon_val, circle_val,
+  inet_val, cidr_val, macaddr_val, macaddr8_val,
+  bit_val, bit_varying_val,
+  tsvector_val, tsquery_val,
+  uuid_val,
+  xml_val,
+  json_val, jsonb_val,
+  int_array, text_array, multi_dim_array,
+  int_range, bigint_range, numeric_range, timestamp_range, date_range,
+  oid_val, regclass_val, regtype_val, regproc_val,
+  address,
+  lsn_val,
+  nullable_int, nullable_text, nullable_json,
+  notes
+) VALUES
+  -- Row 1: Comprehensive data
+  (
+    32767, 2147483647, 9223372036854775807, 12345.67, 9876543.2109, 3.14159, 2.718281828459045,
+    '$1,234.56',
+    'FIXED', 'Variable length string', 'This is unlimited text with special chars: üñíçödé 你好',
+    '\xDEADBEEF'::bytea,
+    '2024-01-15', '14:30:00', '14:30:00-05:00', '2024-01-15 14:30:00', '2024-01-15 14:30:00-05:00', '2 years 3 months 4 days 5 hours 6 minutes',
+    true,
+    'high', 'in_progress', '😊',
+    '(1.5, 2.5)', '{1, 2, 3}', '[(0,0),(6,6)]', '((0,0),(3,3))', '((0,0),(1,1),(2,0))', '((0,0),(4,0),(4,4),(0,4))', '<(2,2),3>',
+    '192.168.1.100', '192.168.0.0/24', '08:00:2b:01:02:03', '08:00:2b:01:02:03:04:05',
+    B'10101010', B'1100110011001100',
+    to_tsvector('english', 'The quick brown fox jumps over the lazy dog'),
+    to_tsquery('english', 'quick & fox'),
+    'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'::uuid,
+    '<note><to>User</to><from>System</from><message>Test XML data</message></note>',
+    '{"name": "John", "age": 30, "hobbies": ["reading", "coding"]}',
+    '{"name": "Jane", "age": 25, "city": "NYC", "active": true, "metadata": {"role": "admin"}}',
+    ARRAY[1, 2, 3, 4, 5], ARRAY['apple', 'banana', 'cherry'], ARRAY[[1,2,3],[4,5,6]],
+    '[10,20)', '[100,200)', '[0.0,100.5)', '["2024-01-01 00:00:00","2024-12-31 23:59:59")', '["2024-01-01","2024-12-31")',
+    16384, 'users'::regclass, 'integer'::regtype, 'sum'::regproc,
+    ROW('123 Main St', 'New York', 'NY', '10001', 'USA')::address_type,
+    '16/B374D848'::pg_lsn,
+    42, 'Some text', '{"optional": "data"}',
+    'Full featured test row with all types populated'
+  ),
+  -- Row 2: Edge cases and special values
+  (
+    -32768, -2147483648, -9223372036854775808, -99999.99, -1234.5678, -3.14, -2.71828,
+    '-$999.99',
+    'ABC', 'Short', 'Multi-line text
+with line breaks
+and special characters: @#$%^&*()',
+    '\x00010203'::bytea,
+    '1999-12-31', '23:59:59', '00:00:00+00:00', '1999-12-31 23:59:59', '1999-12-31 23:59:59+00:00', '0 seconds',
+    false,
+    'critical', 'pending', '😢',
+    '(-1, -1)', '{-1, -2, -3}', '[(-5,-5),(-1,-1)]', '((-2,-2),(2,2))', '((-1,0),(0,1),(1,0))', '((-1,-1),(1,-1),(1,1),(-1,1))', '<(0,0),1>',
+    '::1', '10.0.0.0/8', 'ff:ff:ff:ff:ff:ff', 'ff:ff:ff:ff:ff:ff:ff:ff',
+    B'00000000', B'0',
+    to_tsvector('simple', 'special characters: !@#$%'),
+    to_tsquery('simple', 'special | characters'),
+    '00000000-0000-0000-0000-000000000000'::uuid,
+    '<empty/>',
+    '{"empty": {}, "array": [], "null": null, "number": 0}',
+    '{"unicode": "你好世界", "emoji": "🎉🎊", "nested": {"deep": {"value": 123}}}',
+    ARRAY[]::INTEGER[], ARRAY['']::TEXT[], ARRAY[[0]]::INTEGER[][],
+    '[,)', '[,]', '[,)', '(,)', '[,)',
+    1, 'pg_type'::regclass, 'text'::regtype, 'avg'::regproc,
+    ROW('', '', '', '', '')::address_type,
+    '0/0'::pg_lsn,
+    NULL, NULL, NULL,
+    'Edge cases: negative numbers, empty values, special characters, unbounded ranges'
+  ),
+  -- Row 3: Alternative data for variety
+  (
+    100, 50000, 1000000, 999.99, 12.34, 1.5, 9.87654321,
+    '$50.00',
+    'TEST', 'Medium length varchar value', 'Plain text without special characters',
+    '\xCAFEBABE'::bytea,
+    '2023-06-15', '09:00:00', '12:00:00-07:00', '2023-06-15 09:00:00', '2023-06-15 12:00:00-07:00', '1 day 2 hours 30 minutes',
+    true,
+    'medium', 'completed', '😀',
+    '(10, 20)', '{0, 0, 1}', '[(1,1),(10,10)]', '((5,5),(15,15))', '((0,0),(2,4),(4,0))', '((0,0),(5,0),(5,5),(0,5))', '<(5,5),2>',
+    '10.0.0.1', '172.16.0.0/12', '00:11:22:33:44:55', '00:11:22:33:44:55:66:77',
+    B'11111111', B'1010101010101010',
+    to_tsvector('english', 'PostgreSQL database management system'),
+    to_tsquery('english', 'PostgreSQL & database'),
+    '550e8400-e29b-41d4-a716-446655440000'::uuid,
+    '<data><item id="1">Value 1</item><item id="2">Value 2</item></data>',
+    '{"status": "active", "count": 100}',
+    '{"users": [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]}',
+    ARRAY[10, 20, 30], ARRAY['red', 'green', 'blue'], ARRAY[[7,8,9],[10,11,12]],
+    '[1,10]', '[1000,2000]', '[50.5,100.5]', '["2023-01-01 00:00:00","2023-06-30 23:59:59"]', '["2023-01-01","2023-06-30"]',
+    32768, 'products'::regclass, 'boolean'::regtype, 'count'::regproc,
+    ROW('456 Oak Ave', 'Los Angeles', 'CA', '90001', 'USA')::address_type,
+    'FF/FFFFFFFF'::pg_lsn,
+    0, '', '{}',
+    'Alternative data set with different values'
+  ),
+  -- Row 4: More NULL values for testing
+  (
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+    NULL,
+    NULL, NULL, NULL,
+    NULL,
+    NULL, NULL, NULL, NULL, NULL, NULL,
+    NULL,
+    'low', 'cancelled', '😐',
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+    NULL, NULL,
+    NULL, NULL,
+    NULL,
+    NULL,
+    NULL, NULL,
+    NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+    NULL,
+    NULL,
+    NULL, NULL, NULL,
+    'Row with mostly NULL values to test NULL handling in GUI'
+  ),
+  -- Row 5: Mixed case with emoji mood
+  (
+    255, 65535, 2147483647, 100.00, 200.50, 0.5, 1.234567,
+    '$0.01',
+    'MINIMAL', 'Test', 'Single line text',
+    '\xFF'::bytea,
+    CURRENT_DATE, CURRENT_TIME, CURRENT_TIME, NOW(), NOW(), '15 minutes',
+    false,
+    'low', 'pending', '😡',
+    '(0, 0)', '{1, 1, 1}', '[(0,0),(1,1)]', '((0,0),(1,1))', '((0,0),(1,0),(0.5,1))', '((0,0),(1,0),(1,1),(0,1))', '<(1,1),0.5>',
+    '127.0.0.1', '192.168.1.0/24', 'aa:bb:cc:dd:ee:ff', 'aa:bb:cc:dd:ee:ff:00:11',
+    B'01010101', B'110011',
+    to_tsvector('english', 'test data'),
+    to_tsquery('english', 'test'),
+    gen_random_uuid(),
+    '<simple>text</simple>',
+    '{"simple": "json"}',
+    '{"test": true}',
+    ARRAY[0], ARRAY['single'], ARRAY[[1]],
+    '[-10,10]', '[-100,100]', '[-1,1]', '["2024-01-01","2024-01-02"]', '["2024-01-01","2024-01-01"]',
+    100, 'categories'::regclass, 'varchar'::regtype, 'min'::regproc,
+    ROW('789 Pine St', 'Chicago', 'IL', '60601', 'USA')::address_type,
+    '1/12345678'::pg_lsn,
+    1, 'test', '{"key": "value"}',
+    'Minimal values with current date/time functions'
+  );
+
+-- Create indexes for testing
+CREATE INDEX idx_advanced_priority ON advanced_types_test(priority);
+CREATE INDEX idx_advanced_status ON advanced_types_test(status);
+CREATE INDEX idx_advanced_date ON advanced_types_test(date_val);
+CREATE INDEX idx_advanced_jsonb ON advanced_types_test USING gin(jsonb_val);
+CREATE INDEX idx_advanced_tsvector ON advanced_types_test USING gin(tsvector_val);
+
+-- Create remaining original indexes
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_products_sku ON products(sku);
 CREATE INDEX idx_products_category ON products(category_id);
@@ -249,3 +540,21 @@ JOIN order_statuses os ON o.status_id = os.id
 LEFT JOIN order_items oi ON o.id = oi.order_id
 GROUP BY o.id, o.order_number, u.name, u.email, c.name, os.name, o.order_date, o.total_amount
 ORDER BY o.order_date DESC;
+
+-- Create a view for the advanced types test to make it easier to query
+CREATE VIEW advanced_types_summary AS
+SELECT
+  id,
+  priority,
+  status,
+  mood,
+  bool_val,
+  date_val,
+  jsonb_val,
+  int_array,
+  text_array,
+  inet_val,
+  uuid_val,
+  notes
+FROM advanced_types_test
+ORDER BY id;

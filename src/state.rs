@@ -176,6 +176,7 @@ async fn connect_async(mut cic: ConnectionInfo, db_manager: DatabaseManager, cx:
     // Load password from keychain on-demand
     if let Ok(password) = ConnectionsStore::get_connection_password(&cic.id) {
         cic.password = password;
+        // println!("got password");
     } else {
         let _ = cx.update_global::<ConnectionState, _>(|state, _cx| {
             state.connection_state = ConnectionStatus::Disconnected;
@@ -187,20 +188,15 @@ async fn connect_async(mut cic: ConnectionInfo, db_manager: DatabaseManager, cx:
     let connect_options = cic.to_pg_connect_options();
 
     if let Ok(_) = db_manager.connect_with_options(connect_options).await {
-        if let Ok(schema) = db_manager.get_schema(None).await {
-            let llm_schema = Some(db_manager.format_schema_for_llm(&schema).into());
-            let _ = cx.update_global::<LLMState, _>(|state, _cx| {
-                state.llm_schema = llm_schema;
-            });
-        }
-
         if let Ok(tables) = db_manager.get_tables().await {
+            // println!("Got tables");
             let _ = cx.update_global::<EditorState, _>(|state, _cx| {
                 state.tables = tables;
             });
         }
 
         if let Ok(databases) = db_manager.get_databases().await {
+            // println!("Got databases");
             let _ = cx.update_global::<DatabaseState, _>(|state, _cx| {
                 state.databases = databases;
             });
@@ -210,6 +206,14 @@ async fn connect_async(mut cic: ConnectionInfo, db_manager: DatabaseManager, cx:
             state.active_connection = Some(cic);
             state.connection_state = ConnectionStatus::Connected;
         });
+
+        if let Ok(schema) = db_manager.get_schema(None).await {
+            // println!("Got schema");
+            let llm_schema = Some(db_manager.format_schema_for_llm(&schema).into());
+            let _ = cx.update_global::<LLMState, _>(|state, _cx| {
+                state.llm_schema = llm_schema;
+            });
+        }
 
         loop {
             let mut connected = db_manager.is_connected().await;
@@ -231,6 +235,12 @@ async fn connect_async(mut cic: ConnectionInfo, db_manager: DatabaseManager, cx:
                 .timer(Duration::from_millis(1000))
                 .await;
         }
+    } else {
+        println!("No Connect :(");
+        let _ = cx.update_global::<ConnectionState, _>(|state, _cx| {
+            state.active_connection = None;
+            state.connection_state = ConnectionStatus::Disconnected;
+        });
     }
 }
 

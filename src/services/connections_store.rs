@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use uuid::Uuid;
 
-use super::{ConnectionInfo, SslMode, load_connections as load_json_connections};
+use super::{ConnectionInfo, SslMode};
 
 const KEYRING_SERVICE: &str = "pgui";
 
@@ -345,167 +345,159 @@ impl ConnectionsStore {
 
         Ok(count > 0)
     }
-
-    /// Migrate existing connections from JSON file to SQLite
-    /// This is a one-time migration helper
-    pub async fn migrate_from_json(&self) -> Result<usize> {
-        let connections: Vec<ConnectionInfo> = load_json_connections().await;
-        let count = connections.len();
-
-        for connection in connections {
-            // Only save if it doesn't already exist in the database
-            if !self.connection_exists_by_name(&connection.name).await? {
-                self.create_connection(&connection).await?;
-            }
-        }
-
-        Ok(count)
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[async_std::test]
-    async fn test_new_store_creates_schema() {
-        // Use an in-memory database for tests
-        let options = SqliteConnectOptions::from_str("sqlite::memory:")
-            .unwrap()
-            .create_if_missing(true);
+    #[test]
+    fn test_new_store_creates_schema() {
+        smol::block_on(async {
+            // Use an in-memory database for tests
+            let options = SqliteConnectOptions::from_str("sqlite::memory:")
+                .unwrap()
+                .create_if_missing(true);
 
-        let pool = SqlitePoolOptions::new()
-            .max_connections(5)
-            .connect_with(options)
-            .await
-            .unwrap();
+            let pool = SqlitePoolOptions::new()
+                .max_connections(5)
+                .connect_with(options)
+                .await
+                .unwrap();
 
-        let store = ConnectionsStore { pool };
-        store.initialize_schema().await.unwrap();
+            let store = ConnectionsStore { pool };
+            store.initialize_schema().await.unwrap();
 
-        // If we got here, the store was created successfully
-        assert!(store.load_connections().await.is_ok());
+            // If we got here, the store was created successfully
+            assert!(store.load_connections().await.is_ok());
+        });
     }
 
-    #[async_std::test]
-    async fn test_save_and_load_connection() {
-        let options = SqliteConnectOptions::from_str("sqlite::memory:")
-            .unwrap()
-            .create_if_missing(true);
+    #[test]
+    fn test_save_and_load_connection() {
+        smol::block_on(async {
+            let options = SqliteConnectOptions::from_str("sqlite::memory:")
+                .unwrap()
+                .create_if_missing(true);
 
-        let pool = SqlitePoolOptions::new()
-            .connect_with(options)
-            .await
-            .unwrap();
+            let pool = SqlitePoolOptions::new()
+                .connect_with(options)
+                .await
+                .unwrap();
 
-        let store = ConnectionsStore { pool };
-        store.initialize_schema().await.unwrap();
+            let store = ConnectionsStore { pool };
+            store.initialize_schema().await.unwrap();
 
-        let connection = ConnectionInfo {
-            id: Uuid::new_v4(),
-            name: "test-connection".to_string(),
-            hostname: "localhost".to_string(),
-            username: "testuser".to_string(),
-            password: "testpass".to_string(),
-            database: "testdb".to_string(),
-            port: 5432,
-            ssl_mode: SslMode::Prefer,
-        };
+            let connection = ConnectionInfo {
+                id: Uuid::new_v4(),
+                name: "test-connection".to_string(),
+                hostname: "localhost".to_string(),
+                username: "testuser".to_string(),
+                password: "testpass".to_string(),
+                database: "testdb".to_string(),
+                port: 5432,
+                ssl_mode: SslMode::Prefer,
+            };
 
-        let conn_id = connection.id;
+            let conn_id = connection.id;
 
-        // Save connection
-        store.create_connection(&connection).await.unwrap();
+            // Save connection
+            store.create_connection(&connection).await.unwrap();
 
-        // Load connections
-        let connections = store.load_connections().await.unwrap();
-        assert!(connections.iter().any(|c| c.id == conn_id));
+            // Load connections
+            let connections = store.load_connections().await.unwrap();
+            assert!(connections.iter().any(|c| c.id == conn_id));
 
-        // Get specific connection
-        let loaded = store.get_connection(&conn_id).await.unwrap();
-        assert!(loaded.is_some());
-        let loaded = loaded.unwrap();
-        assert_eq!(loaded.hostname, "localhost");
-        assert_eq!(loaded.port, 5432);
-        assert_eq!(loaded.ssl_mode, SslMode::Prefer);
+            // Get specific connection
+            let loaded = store.get_connection(&conn_id).await.unwrap();
+            assert!(loaded.is_some());
+            let loaded = loaded.unwrap();
+            assert_eq!(loaded.hostname, "localhost");
+            assert_eq!(loaded.port, 5432);
+            assert_eq!(loaded.ssl_mode, SslMode::Prefer);
+        });
     }
 
-    #[async_std::test]
-    async fn test_update_connection() {
-        let options = SqliteConnectOptions::from_str("sqlite::memory:")
-            .unwrap()
-            .create_if_missing(true);
+    #[test]
+    fn test_update_connection() {
+        smol::block_on(async {
+            let options = SqliteConnectOptions::from_str("sqlite::memory:")
+                .unwrap()
+                .create_if_missing(true);
 
-        let pool = SqlitePoolOptions::new()
-            .connect_with(options)
-            .await
-            .unwrap();
+            let pool = SqlitePoolOptions::new()
+                .connect_with(options)
+                .await
+                .unwrap();
 
-        let store = ConnectionsStore { pool };
-        store.initialize_schema().await.unwrap();
+            let store = ConnectionsStore { pool };
+            store.initialize_schema().await.unwrap();
 
-        let mut connection = ConnectionInfo {
-            id: Uuid::new_v4(),
-            name: "update-test".to_string(),
-            hostname: "localhost".to_string(),
-            username: "user1".to_string(),
-            password: "pass1".to_string(),
-            database: "db1".to_string(),
-            port: 5432,
-            ssl_mode: SslMode::Disable,
-        };
+            let mut connection = ConnectionInfo {
+                id: Uuid::new_v4(),
+                name: "update-test".to_string(),
+                hostname: "localhost".to_string(),
+                username: "user1".to_string(),
+                password: "pass1".to_string(),
+                database: "db1".to_string(),
+                port: 5432,
+                ssl_mode: SslMode::Disable,
+            };
 
-        let conn_id = connection.id;
+            let conn_id = connection.id;
 
-        // Save initial
-        store.create_connection(&connection).await.unwrap();
+            // Save initial
+            store.create_connection(&connection).await.unwrap();
 
-        // Update
-        connection.hostname = "newhost".to_string();
-        connection.port = 5433;
-        connection.ssl_mode = SslMode::Require;
-        store.update_connection(&connection).await.unwrap();
+            // Update
+            connection.hostname = "newhost".to_string();
+            connection.port = 5433;
+            connection.ssl_mode = SslMode::Require;
+            store.update_connection(&connection).await.unwrap();
 
-        // Verify update
-        let loaded = store.get_connection(&conn_id).await.unwrap().unwrap();
-        assert_eq!(loaded.hostname, "newhost");
-        assert_eq!(loaded.port, 5433);
-        assert_eq!(loaded.ssl_mode, SslMode::Require);
+            // Verify update
+            let loaded = store.get_connection(&conn_id).await.unwrap().unwrap();
+            assert_eq!(loaded.hostname, "newhost");
+            assert_eq!(loaded.port, 5433);
+            assert_eq!(loaded.ssl_mode, SslMode::Require);
+        });
     }
 
-    #[async_std::test]
-    async fn test_delete_connection() {
-        let options = SqliteConnectOptions::from_str("sqlite::memory:")
-            .unwrap()
-            .create_if_missing(true);
+    #[test]
+    fn test_delete_connection() {
+        smol::block_on(async {
+            let options = SqliteConnectOptions::from_str("sqlite::memory:")
+                .unwrap()
+                .create_if_missing(true);
 
-        let pool = SqlitePoolOptions::new()
-            .connect_with(options)
-            .await
-            .unwrap();
+            let pool = SqlitePoolOptions::new()
+                .connect_with(options)
+                .await
+                .unwrap();
 
-        let store = ConnectionsStore { pool };
-        store.initialize_schema().await.unwrap();
+            let store = ConnectionsStore { pool };
+            store.initialize_schema().await.unwrap();
 
-        let connection = ConnectionInfo {
-            id: Uuid::new_v4(),
-            name: "delete-test".to_string(),
-            hostname: "localhost".to_string(),
-            username: "user".to_string(),
-            password: "pass".to_string(),
-            database: "db".to_string(),
-            port: 5432,
-            ssl_mode: SslMode::Prefer,
-        };
+            let connection = ConnectionInfo {
+                id: Uuid::new_v4(),
+                name: "delete-test".to_string(),
+                hostname: "localhost".to_string(),
+                username: "user".to_string(),
+                password: "pass".to_string(),
+                database: "db".to_string(),
+                port: 5432,
+                ssl_mode: SslMode::Prefer,
+            };
 
-        let conn_id = connection.id;
+            let conn_id = connection.id;
 
-        // Save and verify exists
-        store.create_connection(&connection).await.unwrap();
-        assert!(store.get_connection(&conn_id).await.unwrap().is_some());
+            // Save and verify exists
+            store.create_connection(&connection).await.unwrap();
+            assert!(store.get_connection(&conn_id).await.unwrap().is_some());
 
-        // Delete and verify removed
-        store.delete_connection(&conn_id).await.unwrap();
-        assert!(store.get_connection(&conn_id).await.unwrap().is_none());
+            // Delete and verify removed
+            store.delete_connection(&conn_id).await.unwrap();
+            assert!(store.get_connection(&conn_id).await.unwrap().is_none());
+        });
     }
 }

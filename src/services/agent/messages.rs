@@ -17,6 +17,8 @@ pub enum AgentRequest {
     ToolResults(Vec<ToolResultData>),
     /// Clear conversation history
     ClearHistory,
+    /// Change the LLM model
+    SetModel(String),
 }
 
 /// Messages sent from Agent to UI

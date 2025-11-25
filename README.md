@@ -4,7 +4,7 @@ A high performance GUI to query & manage postgres databases.
 
 Written in [GPUI](https://gpui.rs) with [GPUI Component](https://github.com/longbridge/gpui-component)
 
-![Screenshot](./assets/screenshots/2025-11-24.png)
+![Screenshot](./assets/screenshots/pgui.png)
 
 ### Connections
 
@@ -14,6 +14,6 @@ Passwords are saved in the host OS secure store via Keyring crate.
 
 ### Agent Panel
 
-Right now only Anthropic support w/ Claude 4.5 Sonnet via the env var.
+Only Anthropic support w/ `ANTHROPIC_API_KEY` via enviroment.
 
 See [Mac App Build](./MAC_APP_BUILD.md) for building locally on MacOS

@@ -62,7 +62,7 @@ impl Agent {
 
         Ok(Self {
             api_key,
-            model: "claude-sonnet-4.5-20250929".to_string(),
+            model: "claude-haiku-4-5-20251001".to_string(),
             system_prompt: Self::default_system_prompt(),
             tools,
             conversation: Vec::new(),
@@ -141,6 +141,7 @@ impl Agent {
 
         println!("Usage: {:?}", response.usage);
         println!("Stop reason: {:?}", response.stop_reason);
+        println!("Model: {}", response.model);
 
         // Add assistant response to conversation
         self.add_assistant_message(response.content.clone());
@@ -304,7 +305,7 @@ impl Default for AgentBuilder {
     fn default() -> Self {
         Self {
             api_key: None,
-            model: "claude-sonnet-4-5-20250929".to_string(),
+            model: "claude-haiku-4-5-20251001".to_string(),
             system_prompt: Agent::default_system_prompt(),
             max_tokens: 4096,
         }

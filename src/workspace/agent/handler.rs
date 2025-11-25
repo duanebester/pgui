@@ -55,6 +55,13 @@ pub async fn handle_outgoing(
                 AgentRequest::ClearHistory => {
                     agent.clear_conversation();
                 }
+                AgentRequest::SetModel(model) => {
+                    // Update the agent's model
+                    println!("Setting agent model to: {}", model);
+                    agent.set_model(model);
+                    // Clear conversation when model changes
+                    agent.clear_conversation();
+                }
             }
         }
     } else {

@@ -4,9 +4,10 @@ use gpui::{
     ListState, ParentElement, Render, SharedString, Styled as _, Window, div, list, px,
 };
 use gpui_component::{
-    ActiveTheme as _, Icon, Sizable as _,
+    ActiveTheme as _, Icon, IndexPath, Sizable as _,
     button::{Button, ButtonVariants as _},
     input::{Input, InputState},
+    select::{Select, SelectEvent, SelectState},
     text::TextView,
 };
 
@@ -15,6 +16,14 @@ use crate::{
     workspace::agent::handler::{handle_incoming, handle_outgoing},
 };
 
+/// Available LLM models
+pub const AVAILABLE_MODELS: &[(&str, &str)] = &[
+    ("claude-haiku-4-5-20251001", "Claude Haiku 4.5"),
+    ("claude-sonnet-4-5-20250929", "Claude Sonnet 4.5"),
+    ("claude-opus-4-5-20251101", "Claude Opus 4.5"),
+    ("claude-opus-4-1-20250805", "Claude Opus 4.1"),
+];
+
 pub struct MessageState {
     messages: Vec<UiMessage>,
 }
@@ -22,6 +31,7 @@ pub struct MessageState {
 pub struct AgentPanel {
     textarea: Entity<InputState>,
     message_state: Entity<MessageState>,
+    model_select: Entity<SelectState<Vec<SharedString>>>,
     outgoing_tx: Sender<AgentRequest>,
     list_state: ListState,
     is_loading: bool,
@@ -101,6 +111,15 @@ impl AgentPanel {
                 .placeholder("Ask me anything about your database...")
         });
 
+        let model_names: Vec<SharedString> = AVAILABLE_MODELS
+            .iter()
+            .map(|(_, display_name)| SharedString::from(*display_name))
+            .collect();
+
+        // Default to first model
+        let model_select =
+            cx.new(|cx| SelectState::new(model_names, Some(IndexPath::new(0)), window, cx));
+
         let (incoming_tx, incoming_rx) = unbounded::<AgentResponse>();
         let (outgoing_tx, outgoing_rx) = unbounded::<AgentRequest>();
 
@@ -128,9 +147,30 @@ impl AgentPanel {
         })
         .detach();
 
+        // Subscribe to model selection changes
+        let outgoing_tx_for_select = outgoing_tx.clone();
+        cx.subscribe_in(
+            &model_select,
+            window,
+            move |_this, _entity, event: &SelectEvent<Vec<SharedString>>, _window, _cx| {
+                if let SelectEvent::Confirm(Some(selected_display_name)) = event {
+                    // Find the model ID from the display name
+                    if let Some((model_id, _)) = AVAILABLE_MODELS
+                        .iter()
+                        .find(|(_, display)| *display == selected_display_name.as_ref())
+                    {
+                        let _ = outgoing_tx_for_select
+                            .try_send(AgentRequest::SetModel(model_id.to_string()));
+                    }
+                }
+            },
+        )
+        .detach();
+
         Self {
             textarea,
             message_state,
+            model_select,
             outgoing_tx,
             list_state,
             is_loading: false,
@@ -212,16 +252,29 @@ impl Render for AgentPanel {
                             .child(Input::new(&self.textarea).h(px(120.0)).appearance(false)),
                     )
                     .child(
-                        div().flex().justify_end().child(
-                            Button::new("btn-send")
-                                .tooltip("send")
-                                .ghost()
-                                .p_2()
-                                .small()
-                                .loading(self.is_loading)
-                                .icon(Icon::empty().path("icons/send.svg"))
-                                .on_click(cx.listener(Self::on_send_message)),
-                        ),
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .child(
+                                div()
+                                    .flex()
+                                    .text_sm()
+                                    .pl_2()
+                                    .items_center()
+                                    .child(Icon::empty().path("icons/anthropic.svg"))
+                                    .child(Select::new(&self.model_select).appearance(false)),
+                            )
+                            .child(
+                                Button::new("btn-send")
+                                    .tooltip("send")
+                                    .ghost()
+                                    .pr_2()
+                                    .small()
+                                    .loading(self.is_loading)
+                                    .icon(Icon::empty().path("icons/send.svg"))
+                                    .on_click(cx.listener(Self::on_send_message)),
+                            ),
                     ),
             )
     }

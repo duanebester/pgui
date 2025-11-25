@@ -13,6 +13,7 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 
 use gpui_component::ActiveTheme;
+use gpui_component::Root;
 use gpui_component::resizable::{resizable_panel, v_resizable};
 use gpui_component::spinner::Spinner;
 
@@ -248,7 +249,7 @@ impl Workspace {
 }
 
 impl Render for Workspace {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let content = match self.connection_state.clone() {
             ConnectionStatus::Disconnected => self.render_disconnected(cx),
             ConnectionStatus::Connected => self.render_connected(cx),
@@ -263,5 +264,8 @@ impl Render for Workspace {
             .child(self.header_bar.clone())
             .child(content)
             .child(self.footer_bar.clone())
+            .children(Root::render_dialog_layer(window, cx))
+            .children(Root::render_sheet_layer(window, cx))
+            .children(Root::render_notification_layer(window, cx))
     }
 }

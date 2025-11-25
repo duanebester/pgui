@@ -1,6 +1,6 @@
 use gpui::{prelude::FluentBuilder as _, *};
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt,
+    ActiveTheme as _, Icon, IconName, Sizable as _, StyledExt, WindowExt as _,
     button::{Button, ButtonVariants as _},
     label::Label,
     list::{List, ListEvent, ListState},
@@ -196,17 +196,38 @@ impl Render for ConnectionManager {
                                             this.is_creating = false;
                                             this.is_editing = false;
 
-                                            cx.update_entity(&this.connection_form, |form, cx| {
-                                                form.clear(win, cx);
-                                                cx.notify();
+                                            let connection_form_clone = this.connection_form.clone();
+                                            let connection_clone = this.selected_connection.clone();
+                                            let manager = cx.entity();
+
+                                            win.open_dialog(cx, move |dialog, _win, _cx| {
+                                                let form_clone = connection_form_clone.clone();
+                                                let conn_clone = connection_clone.clone();
+                                                let manager_clone = manager.clone();
+
+                                                dialog
+                                                    .confirm()
+                                                    .child("Are you sure you want to delete this connection?")
+                                                    .on_ok(move |_, window, cx| {
+                                                        cx.update_entity(&form_clone, |form, cx|{
+                                                          form.clear(window, cx);
+                                                          cx.notify();
+                                                        });
+
+                                                        if let Some(conn) = conn_clone.clone() {
+                                                          delete_connection(conn, cx);
+                                                        }
+
+                                                        cx.update_entity(&manager_clone.clone(), |manager, cx|{
+                                                          manager.selected_connection = None;
+                                                          cx.notify();
+                                                        });
+
+                                                        // Notify delete
+                                                        window.push_notification("Deleted", cx);
+                                                        true
+                                                    })
                                             });
-
-                                            if let Some(conn) = this.selected_connection.clone() {
-                                                delete_connection(conn, cx);
-                                            }
-
-                                            this.selected_connection = None;
-                                            cx.notify();
                                         })),
                                 )
                                 .child(

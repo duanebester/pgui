@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::{services::LspStore, state::EditorState};
+use crate::{services::SqlCompletionProvider, state::EditorState};
 use gpui::*;
 use gpui_component::{
     ActiveTheme as _, Disableable as _, Icon, Sizable as _,
@@ -21,7 +21,7 @@ impl EventEmitter<EditorEvent> for Editor {}
 pub struct Editor {
     input_state: Entity<InputState>,
     _subscribes: Vec<Subscription>,
-    lsp_store: LspStore,
+    lsp_store: SqlCompletionProvider,
     is_executing: bool,
     is_formatting: bool,
 }
@@ -29,7 +29,7 @@ pub struct Editor {
 impl Editor {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let default_language = "sql".to_string();
-        let lsp_store = LspStore::new();
+        let lsp_store = SqlCompletionProvider::new();
 
         let input_state = cx.new(|cx| {
             let mut i = InputState::new(window, cx)

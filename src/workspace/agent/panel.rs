@@ -1,5 +1,4 @@
 use async_channel::{Sender, unbounded};
-use chrono::Utc;
 use gpui::{
     AnyElement, App, AppContext, ClickEvent, Context, Div, Entity, IntoElement, ListAlignment,
     ListState, ParentElement, Render, SharedString, Styled as _, Window, div, list, px,
@@ -12,8 +11,8 @@ use gpui_component::{
 };
 
 use crate::{
-    services::{AgentRequest, AgentResponse, MessageRole, UiMessage},
-    workspace::agent_handler::{handle_incoming, handle_outgoing},
+    services::agent::{AgentRequest, AgentResponse, MessageRole, UiMessage},
+    workspace::agent::handler::{handle_incoming, handle_outgoing},
 };
 
 pub struct MessageState {
@@ -79,6 +78,9 @@ impl AgentPanel {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let items = self.message_state.read(cx).messages.clone();
+        if items.len() == 0 {
+            return div().into_any_element();
+        }
         let item = items.get(ix).unwrap().clone();
         let elem = match item.role {
             MessageRole::ToolCall => self.render_tool_call(item),
@@ -103,34 +105,7 @@ impl AgentPanel {
         let (outgoing_tx, outgoing_rx) = unbounded::<AgentRequest>();
 
         // Initialize state with empty messages
-        let message_state = cx.new(|_cx| MessageState {
-            messages: vec![
-                UiMessage {
-                    role: MessageRole::System,
-                    content: String::from("system!"),
-                    timestamp: Utc::now(),
-                    metadata: None,
-                },
-                UiMessage {
-                    role: MessageRole::Assistant,
-                    content: String::from("bot bot bot"),
-                    timestamp: Utc::now(),
-                    metadata: None,
-                },
-                UiMessage {
-                    role: MessageRole::User,
-                    content: String::from("tooooooolslslsls"),
-                    timestamp: Utc::now(),
-                    metadata: None,
-                },
-                UiMessage {
-                    role: MessageRole::User,
-                    content: String::from("user user user"),
-                    timestamp: Utc::now(),
-                    metadata: None,
-                },
-            ],
-        });
+        let message_state = cx.new(|_cx| MessageState { messages: vec![] });
 
         // Spawn the agent message handler
         cx.background_executor()

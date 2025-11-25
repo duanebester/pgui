@@ -4,6 +4,8 @@ A high performance GUI to query & manage postgres databases.
 
 Written in [GPUI](https://gpui.rs) with [GPUI Component](https://github.com/longbridge/gpui-component)
 
+![Screenshot](./assets/screenshots/2025-11-24.png)
+
 ### Connections
 
 Connections will be saved to a sqlite db file in `~/.pgui/connections.db`

@@ -16,10 +16,8 @@ pub struct FooterBar {
 }
 
 pub enum FooterBarEvent {
-    HideTables,
-    ShowTables,
-    ShowAgent,
-    HideAgent,
+    ToggleTables(bool), // true = show
+    ToggleAgent(bool),
 }
 
 impl EventEmitter<FooterBarEvent> for FooterBar {}
@@ -57,9 +55,9 @@ impl Render for FooterBar {
             .on_click(cx.listener(|this, _evt, _win, cx| {
                 this.tables_active = !this.tables_active;
                 if this.tables_active {
-                    cx.emit(FooterBarEvent::ShowTables);
+                    cx.emit(FooterBarEvent::ToggleTables(true));
                 } else {
-                    cx.emit(FooterBarEvent::HideTables);
+                    cx.emit(FooterBarEvent::ToggleTables(false));
                 }
                 cx.notify();
             }));
@@ -73,9 +71,9 @@ impl Render for FooterBar {
             .on_click(cx.listener(|this, _evt, _win, cx| {
                 this.agent_active = !this.agent_active;
                 if this.agent_active {
-                    cx.emit(FooterBarEvent::ShowAgent);
+                    cx.emit(FooterBarEvent::ToggleAgent(true));
                 } else {
-                    cx.emit(FooterBarEvent::HideAgent);
+                    cx.emit(FooterBarEvent::ToggleAgent(false));
                 }
                 cx.notify();
             }));

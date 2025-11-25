@@ -8,7 +8,7 @@ use gpui_component::{
 
 use crate::{
     services::{ConnectionInfo, SslMode},
-    state::ConnectionState,
+    state::{add_connection, connect, delete_connection, update_connection},
 };
 
 #[allow(dead_code)]
@@ -135,7 +135,7 @@ impl ConnectionForm {
 
     fn connect(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(connection) = self.get_connection(cx) {
-            ConnectionState::connect(&connection, cx);
+            connect(&connection, cx);
             self.clear(window, cx);
             cx.notify();
         }
@@ -209,20 +209,20 @@ impl ConnectionForm {
 
     fn save_connection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(connection) = self.get_connection(cx) {
-            ConnectionState::add_connection(connection, cx);
+            add_connection(connection, cx);
             self.clear(window, cx);
         }
     }
 
     fn update_connection(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         if let Some(connection) = self.get_connection(cx) {
-            ConnectionState::update_connection(connection, cx);
+            update_connection(connection, cx);
         }
     }
 
     fn delete_connection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(connection) = self.get_connection(cx) {
-            ConnectionState::delete_connection(connection, cx);
+            delete_connection(connection, cx);
             self.clear(window, cx);
         }
     }

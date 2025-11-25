@@ -1,18 +1,14 @@
+//! Agent client for communicating with the Anthropic API.
+
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::collections::HashMap;
 use std::env;
 
-use super::agent_messages::{AgentResponse, ToolCallData, ToolResultData};
-
-/// A tool that can be executed by the agent
-#[derive(Clone)]
-pub struct Tool {
-    pub name: String,
-    pub description: String,
-    pub input_schema: Value,
-}
+use super::messages::{AgentResponse, ToolCallData, ToolResultData};
+use super::types::{
+    ContentBlock, Message, PropertySchema, Tool, ToolDefinition, create_input_schema,
+};
 
 /// Agent that can converse with an LLM and execute tools
 #[derive(Clone)]
@@ -23,46 +19,6 @@ pub struct Agent {
     tools: Vec<Tool>,
     conversation: Vec<Message>,
     max_tokens: u32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum Message {
-    User {
-        role: String,
-        content: Vec<ContentBlock>,
-    },
-    Assistant {
-        role: String,
-        content: Vec<ContentBlock>,
-    },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum ContentBlock {
-    #[serde(rename = "text")]
-    Text { text: String },
-    #[serde(rename = "tool_use")]
-    ToolUse {
-        id: String,
-        name: String,
-        input: Value,
-    },
-    #[serde(rename = "tool_result")]
-    ToolResult {
-        tool_use_id: String,
-        content: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        is_error: Option<bool>,
-    },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolDefinition {
-    pub name: String,
-    pub description: String,
-    pub input_schema: Value,
 }
 
 // Anthropic API request/response types
@@ -106,7 +62,7 @@ impl Agent {
 
         Ok(Self {
             api_key,
-            model: "claude-sonnet-4.5-20250929".to_string(), // Consistent with builder
+            model: "claude-sonnet-4.5-20250929".to_string(),
             system_prompt: Self::default_system_prompt(),
             tools,
             conversation: Vec::new(),
@@ -209,12 +165,10 @@ impl Agent {
                 }
                 ContentBlock::ToolResult { .. } => {
                     println!("ContentBlock::ToolResult: shouldn't happen");
-                    // This shouldn't happen in assistant messages
                 }
             }
         }
 
-        // If there are tool calls, return them so the UI can execute them
         if !tool_calls.is_empty() {
             return Ok(AgentResponse::ToolCallRequest {
                 text: if text_response.is_empty() {
@@ -227,7 +181,6 @@ impl Agent {
             });
         }
 
-        // Otherwise return the text response
         if !text_response.is_empty() {
             return Ok(AgentResponse::TextResponse {
                 text: text_response,
@@ -235,7 +188,6 @@ impl Agent {
             });
         }
 
-        // Unexpected: no tool calls and no text
         Err(anyhow!("No text or tool calls in assistant response"))
     }
 
@@ -399,26 +351,11 @@ impl AgentBuilder {
     }
 }
 
-/// Helper to create a simple JSON schema for tool inputs
-pub fn create_input_schema(
-    properties: HashMap<String, PropertySchema>,
-    required: Vec<&str>,
-) -> Value {
-    serde_json::json!({
-        "type": "object",
-        "properties": properties,
-        "required": required
-    })
-}
+// ============================================================================
+// Tool Helpers
+// ============================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PropertySchema {
-    #[serde(rename = "type")]
-    pub property_type: String,
-    pub description: String,
-}
-
-// Example tool: Get formatted schema as markdown
+/// Example tool: Get formatted schema as markdown
 pub fn create_get_schema_tool() -> Tool {
     let mut properties = HashMap::new();
     properties.insert(

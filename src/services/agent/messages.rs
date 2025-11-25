@@ -1,6 +1,12 @@
+//! Message types for agent communication and UI display.
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+// ============================================================================
+// Agent Communication Types
+// ============================================================================
 
 /// Messages sent from UI to Agent
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,15 +84,10 @@ pub struct ToolResultData {
 /// Role of a message in the UI conversation display
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MessageRole {
-    /// Message from the user
     User,
-    /// Message from the AI assistant
     Assistant,
-    /// System-level message
     System,
-    /// Tool being called by the assistant
     ToolCall,
-    /// Result from a tool execution
     ToolResult,
 }
 
@@ -96,18 +97,14 @@ pub struct UiMessage {
     pub role: MessageRole,
     pub content: String,
     pub timestamp: DateTime<Utc>,
-    /// Optional metadata for tool-related messages
     pub metadata: Option<MessageMetadata>,
 }
 
 /// Additional metadata for messages
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MessageMetadata {
-    /// Tool name for tool calls/results
     pub tool_name: Option<String>,
-    /// Whether this is an error message
     pub is_error: bool,
-    /// Tool input for tool calls
     pub tool_input: Option<Value>,
 }
 
@@ -134,7 +131,6 @@ impl UiMessage {
 
     /// Create a new tool call message
     pub fn tool_call(tool_name: String, tool_input: Value) -> Self {
-        // let formatted_input = serde_json::to_string_pretty(&tool_input).unwrap_or_default();
         Self {
             role: MessageRole::ToolCall,
             content: format!("Calling {}", tool_name),

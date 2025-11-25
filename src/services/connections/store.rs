@@ -1,3 +1,9 @@
+//! Connection storage using SQLite and system keyring.
+//!
+//! This module provides:
+//! - `ConnectionsStore` - Manages saved PostgreSQL connections in SQLite
+//! - Secure password storage using the system keyring
+
 use anyhow::{Context, Result};
 use keyring::Entry;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
@@ -5,11 +11,14 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use uuid::Uuid;
 
-use super::{ConnectionInfo, SslMode};
+use super::types::{ConnectionInfo, SslMode};
 
 const KEYRING_SERVICE: &str = "pgui";
 
-/// ConnectionsStore manages the SQLite database for storing saved PostgreSQL connections
+/// ConnectionsStore manages the SQLite database for storing saved PostgreSQL connections.
+///
+/// Passwords are stored securely in the system keyring, while connection
+/// metadata (host, port, username, etc.) is stored in SQLite.
 #[derive(Debug, Clone)]
 pub struct ConnectionsStore {
     pool: SqlitePool,
@@ -143,29 +152,6 @@ impl ConnectionsStore {
         Ok(())
     }
 
-    /// Parse SSL mode string from database
-    fn parse_ssl_mode(ssl_mode_str: &str) -> SslMode {
-        match ssl_mode_str {
-            "disable" => SslMode::Disable,
-            "prefer" => SslMode::Prefer,
-            "require" => SslMode::Require,
-            "verify-ca" => SslMode::VerifyCa,
-            "verify-full" => SslMode::VerifyFull,
-            _ => SslMode::Prefer, // Default fallback
-        }
-    }
-
-    /// Convert SSL mode to database string
-    fn ssl_mode_to_string(ssl_mode: &SslMode) -> &'static str {
-        match ssl_mode {
-            SslMode::Disable => "disable",
-            SslMode::Prefer => "prefer",
-            SslMode::Require => "require",
-            SslMode::VerifyCa => "verify-ca",
-            SslMode::VerifyFull => "verify-full",
-        }
-    }
-
     /// Load all saved connections from the database
     pub async fn load_connections(&self) -> Result<Vec<ConnectionInfo>> {
         let rows = sqlx::query_as::<_, (String, String, String, String, String, i64, String)>(
@@ -192,7 +178,7 @@ impl ConnectionsStore {
                 password,
                 database,
                 port: port as usize,
-                ssl_mode: Self::parse_ssl_mode(&ssl_mode_str),
+                ssl_mode: SslMode::from_db_str(&ssl_mode_str),
             });
         }
 
@@ -227,7 +213,7 @@ impl ConnectionsStore {
         .bind(&connection.username)
         .bind(&connection.database)
         .bind(connection.port as i64)
-        .bind(Self::ssl_mode_to_string(&connection.ssl_mode))
+        .bind(connection.ssl_mode.to_db_str())
         .execute(&self.pool)
         .await?;
 
@@ -277,7 +263,7 @@ impl ConnectionsStore {
         .bind(&connection.username)
         .bind(&connection.database)
         .bind(connection.port as i64)
-        .bind(Self::ssl_mode_to_string(&connection.ssl_mode))
+        .bind(connection.ssl_mode.to_db_str())
         .execute(&self.pool)
         .await?;
 
@@ -323,15 +309,16 @@ impl ConnectionsStore {
                     password,
                     database,
                     port: port as usize,
-                    ssl_mode: Self::parse_ssl_mode(&ssl_mode_str),
+                    ssl_mode: SslMode::from_db_str(&ssl_mode_str),
                 }
             },
         ))
     }
 
-    /// Get password for a specific connection from keyring
+    /// Get password for a specific connection from keyring.
+    ///
     /// This should be called on-demand when actually connecting to avoid
-    /// multiple keychain access prompts on startup
+    /// multiple keychain access prompts on startup.
     pub fn get_connection_password(connection_id: &Uuid) -> Result<String> {
         Self::get_password(connection_id)
     }

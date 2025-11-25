@@ -9,7 +9,7 @@ use gpui_component::{
 
 use crate::{
     services::ConnectionInfo,
-    state::ConnectionState,
+    state::{ConnectionState, connect, delete_connection},
     workspace::connections::{ConnectionForm, ConnectionListDelegate},
 };
 
@@ -202,7 +202,7 @@ impl Render for ConnectionManager {
                                             });
 
                                             if let Some(conn) = this.selected_connection.clone() {
-                                                ConnectionState::delete_connection(conn, cx);
+                                                delete_connection(conn, cx);
                                             }
 
                                             this.selected_connection = None;
@@ -238,7 +238,7 @@ impl Render for ConnectionManager {
                                             });
 
                                             if let Some(conn) = this.selected_connection.clone() {
-                                                ConnectionState::connect(&conn, cx);
+                                                connect(&conn, cx);
                                             }
 
                                             this.selected_connection = None;

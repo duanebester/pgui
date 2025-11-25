@@ -12,13 +12,13 @@ use gpui_component::{
     label::Label,
     list::ListItem,
     select::{Select, SelectEvent, SelectState},
-    tree::{TreeItem, TreeState, tree},
+    tree::{TreeEntry, TreeItem, TreeState, tree},
     v_flex,
 };
 
 use crate::{
     services::{ConnectionInfo, DatabaseManager, TableInfo},
-    state::{ConnectionState, DatabaseState},
+    state::{ConnectionState, DatabaseState, change_database, disconnect},
 };
 
 pub enum TableEvent {
@@ -198,7 +198,7 @@ impl TablesTree {
         match event {
             SelectEvent::Confirm(value) => {
                 if let Some(database) = value {
-                    ConnectionState::change_database(database.to_string(), cx)
+                    change_database(database.to_string(), cx)
                 }
             }
         }
@@ -234,6 +234,101 @@ impl TablesTree {
             cx.notify();
         }
     }
+
+    fn render_tree_item(
+        &self,
+        ix: usize,
+        entry: &TreeEntry,
+        selected: bool,
+        cx: &mut Context<Self>,
+    ) -> ListItem {
+        let item = entry.item();
+        let is_selected = selected;
+
+        let table_type = if item.id.clone().ends_with("-VIEW") {
+            "VIEW"
+        } else if item.id.clone().ends_with("-BASE TABLE") {
+            "BASE"
+        } else {
+            "SCHEMA"
+        };
+
+        // Determine colors based on selection state
+        let text_color = if is_selected {
+            cx.theme().accent_foreground
+        } else {
+            cx.theme().foreground
+        };
+
+        let bg_color = if is_selected {
+            cx.theme().list_active
+        } else if ix % 2 == 0 {
+            cx.theme().list
+        } else {
+            cx.theme().list_even
+        };
+
+        // Icon based on item type
+        let icon = if !entry.is_folder() {
+            // check if id ends with -view
+            if item.id.clone().ends_with("-VIEW") {
+                IconName::Eye
+            } else {
+                IconName::Frame
+            }
+        } else if entry.is_expanded() {
+            IconName::ChevronDown
+        } else {
+            IconName::ChevronRight
+        };
+
+        let icon: Icon = icon.into();
+
+        ListItem::new(ix)
+            .w_full()
+            .py_3()
+            .px_4()
+            .pl(px(16.) * entry.depth() + px(12.))
+            .bg(bg_color)
+            .border_1()
+            .border_color(if is_selected {
+                cx.theme().list_active_border
+            } else {
+                bg_color
+            })
+            .rounded(cx.theme().radius)
+            .child(
+                div()
+                    .h_flex()
+                    .justify_between()
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_2()
+                            .text_color(text_color)
+                            .child(icon.size_4().text_color(text_color.opacity(0.7)))
+                            .child(
+                                Label::new(item.label.clone())
+                                    .font_medium()
+                                    .text_sm()
+                                    .whitespace_nowrap(),
+                            ),
+                    )
+                    .child(
+                        Label::new(table_type)
+                            .text_xs()
+                            .text_color(text_color.opacity(0.6)),
+                    ),
+            )
+            .on_click(cx.listener({
+                let item = item.clone();
+                move |this, _, window, cx| {
+                    this.selected_item = Some(item.clone());
+                    this.on_select_table_item(&SelectItem, window, cx);
+                    cx.notify();
+                }
+            }))
+    }
 }
 
 impl Render for TablesTree {
@@ -252,7 +347,7 @@ impl Render for TablesTree {
             .danger()
             .ghost()
             .tooltip("Disconnect")
-            .on_click(|_evt, _win, cx| ConnectionState::disconnect(cx));
+            .on_click(|_evt, _win, cx| disconnect(cx));
 
         let refresh_button = Button::new("refresh")
             .icon(Icon::empty().path("icons/rotate-ccw.svg"))
@@ -322,102 +417,11 @@ impl Render for TablesTree {
             .child(Divider::horizontal())
             .child(header)
             .child(
-                tree(
-                    &self.tree_state,
-                    move |ix, entry, _selected, _window, cx| {
-                        view.update(cx, |_, cx| {
-                            let item = entry.item();
-                            let is_selected = _selected;
-
-                            let table_type = if item.id.clone().ends_with("-VIEW") {
-                                "VIEW"
-                            } else if item.id.clone().ends_with("-BASE TABLE") {
-                                "BASE"
-                            } else {
-                                "SCHEMA"
-                            };
-
-                            // Determine colors based on selection state
-                            let text_color = if is_selected {
-                                cx.theme().accent_foreground
-                            } else {
-                                cx.theme().foreground
-                            };
-
-                            let bg_color = if is_selected {
-                                cx.theme().list_active
-                            } else if ix % 2 == 0 {
-                                cx.theme().list
-                            } else {
-                                cx.theme().list_even
-                            };
-
-                            // Icon based on item type
-                            let icon = if !entry.is_folder() {
-                                // check if id ends with -view
-                                if item.id.clone().ends_with("-VIEW") {
-                                    IconName::Eye
-                                } else {
-                                    IconName::Frame
-                                }
-                            } else if entry.is_expanded() {
-                                IconName::ChevronDown
-                            } else {
-                                IconName::ChevronRight
-                            };
-
-                            let icon: Icon = icon.into();
-
-                            ListItem::new(ix)
-                                .w_full()
-                                .py_3()
-                                .px_4()
-                                .pl(px(16.) * entry.depth() + px(12.))
-                                .bg(bg_color)
-                                .border_1()
-                                .border_color(if is_selected {
-                                    cx.theme().list_active_border
-                                } else {
-                                    bg_color
-                                })
-                                .rounded(cx.theme().radius)
-                                .child(
-                                    div()
-                                        .h_flex()
-                                        .justify_between()
-                                        .child(
-                                            h_flex()
-                                                .items_center()
-                                                .gap_2()
-                                                .text_color(text_color)
-                                                .child(
-                                                    icon.size_4()
-                                                        .text_color(text_color.opacity(0.7)),
-                                                )
-                                                .child(
-                                                    Label::new(item.label.clone())
-                                                        .font_medium()
-                                                        .text_sm()
-                                                        .whitespace_nowrap(),
-                                                ),
-                                        )
-                                        .child(
-                                            Label::new(table_type)
-                                                .text_xs()
-                                                .text_color(text_color.opacity(0.6)),
-                                        ),
-                                )
-                                .on_click(cx.listener({
-                                    let item = item.clone();
-                                    move |this, _, window, cx| {
-                                        this.selected_item = Some(item.clone());
-                                        this.on_select_table_item(&SelectItem, window, cx);
-                                        cx.notify();
-                                    }
-                                }))
-                        })
-                    },
-                )
+                tree(&self.tree_state, move |ix, entry, selected, _window, cx| {
+                    view.update(cx, |this, cx| {
+                        this.render_tree_item(ix, entry, selected, cx)
+                    })
+                })
                 .p(px(8.))
                 .flex_1()
                 .w_full()

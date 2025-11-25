@@ -3,12 +3,12 @@ use super::editor::Editor;
 use super::editor::EditorEvent;
 use super::footer_bar::{FooterBar, FooterBarEvent};
 use super::header_bar::HeaderBar;
-use super::tables_tree::{TableEvent, TablesTree};
+use super::tables::{TableEvent, TablesTree};
 
 use crate::services::{EnhancedQueryExecutionResult, TableInfo};
 use crate::state::{ConnectionState, ConnectionStatus};
-use crate::workspace::agent_panel::AgentPanel;
-use crate::workspace::results_panel::EnhancedResultsPanel;
+use crate::workspace::agent::AgentPanel;
+use crate::workspace::results::ResultsPanel;
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
 
@@ -24,7 +24,7 @@ pub struct Workspace {
     editor: Entity<Editor>,
     agent_panel: Entity<AgentPanel>,
     connection_manager: Entity<ConnectionManager>,
-    enhanced_results: Entity<EnhancedResultsPanel>,
+    results_panel: Entity<ResultsPanel>,
     _subscriptions: Vec<Subscription>,
     show_tables: bool,
     show_agent: bool,
@@ -37,7 +37,7 @@ impl Workspace {
         let tables_tree = TablesTree::view(window, cx);
         let agent_panel = AgentPanel::view(window, cx);
         let editor = Editor::view(window, cx);
-        let enhanced_results = EnhancedResultsPanel::view(window, cx);
+        let results_panel = ResultsPanel::view(window, cx);
         let connection_manager = ConnectionManager::view(window, cx);
 
         let _subscriptions = vec![
@@ -55,17 +55,11 @@ impl Workspace {
             }),
             cx.subscribe(&footer_bar, |this, _, event: &FooterBarEvent, cx| {
                 match event {
-                    FooterBarEvent::HideTables => {
-                        this.show_tables = false;
+                    FooterBarEvent::ToggleTables(show) => {
+                        this.show_tables = *show;
                     }
-                    FooterBarEvent::ShowTables => {
-                        this.show_tables = true;
-                    }
-                    FooterBarEvent::HideAgent => {
-                        this.show_agent = false;
-                    }
-                    FooterBarEvent::ShowAgent => {
-                        this.show_agent = true;
+                    FooterBarEvent::ToggleAgent(show) => {
+                        this.show_agent = *show;
                     }
                 }
                 cx.notify();
@@ -79,7 +73,7 @@ impl Workspace {
             tables_tree,
             editor,
             agent_panel,
-            enhanced_results,
+            results_panel,
             _subscriptions,
             connection_state: ConnectionStatus::Disconnected,
             show_tables: true,
@@ -104,7 +98,7 @@ impl Workspace {
             let result = db_manager.execute_query_enhanced(&query).await;
             this.update(cx, |this, cx| {
                 // Update results panel
-                this.enhanced_results.update(cx, |results, cx| {
+                this.results_panel.update(cx, |results, cx| {
                     results.update_result(result, cx);
                 });
 
@@ -140,12 +134,12 @@ impl Workspace {
             this.update(cx, |this, cx| {
                 match result {
                     Ok(query_result) => {
-                        this.enhanced_results.update(cx, |results, cx| {
+                        this.results_panel.update(cx, |results, cx| {
                             results.update_result(query_result, cx);
                         });
                     }
                     Err(e) => {
-                        this.enhanced_results.update(cx, |results, cx| {
+                        this.results_panel.update(cx, |results, cx| {
                             results.update_result(
                                 EnhancedQueryExecutionResult::Error(format!(
                                     "Failed to load table columns: {}",
@@ -214,7 +208,7 @@ impl Workspace {
                     .child(
                         resizable_panel()
                             .size(px(200.))
-                            .child(self.enhanced_results.clone()),
+                            .child(self.results_panel.clone()),
                     ),
             );
 

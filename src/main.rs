@@ -6,12 +6,11 @@ mod window;
 mod workspace;
 
 use assets::*;
+use gpui::{App, AppContext as _, Application, KeyBinding, actions};
+use gpui_component::{ActiveTheme as _, Root, theme};
 use themes::*;
 use window::*;
 use workspace::*;
-
-use gpui::*;
-use gpui_component::{ActiveTheme as _, Root, theme};
 
 actions!(window, [Quit]);
 

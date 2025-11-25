@@ -1,5 +1,7 @@
 use tree_sitter::{Parser, Tree};
 
+/// Represents a detected SQL query with position information
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct SqlQuery {
     pub start_byte: usize,
@@ -11,10 +13,12 @@ pub struct SqlQuery {
     pub query_text: String,
 }
 
+/// Analyzes SQL content to detect individual query boundaries
 pub struct SqlQueryAnalyzer {
     parser: Parser,
 }
 
+#[allow(dead_code)]
 impl SqlQueryAnalyzer {
     pub fn new() -> Self {
         let mut parser = Parser::new();
@@ -24,6 +28,7 @@ impl SqlQueryAnalyzer {
         Self { parser }
     }
 
+    /// Detects all SQL queries in the given content
     pub fn detect_queries(&mut self, sql_content: &str) -> Vec<SqlQuery> {
         let tree = match self.parser.parse(sql_content, None) {
             Some(tree) => tree,
@@ -71,14 +76,15 @@ impl SqlQueryAnalyzer {
                 .unwrap_or("")
                 .trim()
                 .to_string();
+
             if !query_text.is_empty() && !query_text.starts_with("--") {
                 queries.push(SqlQuery {
                     start_byte: node.start_byte(),
                     end_byte: node.end_byte(),
                     start_line: node.start_position().row,
                     end_line: node.end_position().row,
-                    start_char: self.byte_to_char_offset(source, node.start_byte()),
-                    end_char: self.byte_to_char_offset(source, node.end_byte()),
+                    start_char: byte_to_char_offset(source, node.start_byte()),
+                    end_char: byte_to_char_offset(source, node.end_byte()),
                     query_text,
                 });
             }
@@ -110,7 +116,7 @@ impl SqlQueryAnalyzer {
                 let query_text = current_query.trim().to_string();
                 if !query_text.is_empty() {
                     queries.push(SqlQuery {
-                        start_byte: query_start_char, // Approximation
+                        start_byte: query_start_char,
                         end_byte: current_char_offset + line.len(),
                         start_line: query_start_line,
                         end_line: line_idx,
@@ -138,10 +144,11 @@ impl SqlQueryAnalyzer {
             });
         }
     }
+}
 
-    fn byte_to_char_offset(&self, text: &str, byte_offset: usize) -> usize {
-        text.char_indices()
-            .position(|(i, _)| i >= byte_offset)
-            .unwrap_or(text.chars().count())
-    }
+/// Converts a byte offset to a character offset in the given text
+fn byte_to_char_offset(text: &str, byte_offset: usize) -> usize {
+    text.char_indices()
+        .position(|(i, _)| i >= byte_offset)
+        .unwrap_or(text.chars().count())
 }

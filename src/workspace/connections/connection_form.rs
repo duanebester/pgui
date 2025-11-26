@@ -7,7 +7,7 @@ use gpui_component::{
 };
 
 use crate::{
-    services::{ConnectionInfo, SslMode},
+    services::{ConnectionInfo, ConnectionsStore, SslMode},
     state::{add_connection, connect, delete_connection, update_connection},
 };
 
@@ -149,6 +149,17 @@ impl ConnectionForm {
         let database = self.database.read(cx).value();
         let port = self.port.read(cx).value();
 
+        // For editing: if password is empty, try to fetch from keychain
+        let password = if password.is_empty() {
+            if let Some(ref active) = self.active_connection {
+                ConnectionsStore::get_connection_password(&active.id).unwrap_or_default()
+            } else {
+                password.to_string()
+            }
+        } else {
+            password.to_string()
+        };
+
         // Validate inputs
         if name.is_empty()
             || hostname.is_empty()
@@ -221,7 +232,7 @@ impl ConnectionForm {
     }
 
     fn delete_connection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(connection) = self.get_connection(cx) {
+        if let Some(connection) = self.active_connection.clone() {
             delete_connection(connection, cx);
             self.clear(window, cx);
         }
@@ -302,8 +313,24 @@ impl Render for ConnectionForm {
                                         Button::new("delete-connection")
                                             .child("Delete")
                                             .danger()
-                                            .on_click(cx.listener(|this, _, win, cx| {
-                                                this.delete_connection(win, cx)
+                                            .on_click(cx.listener(|_this, _, win, cx| {
+                                              let entity = cx.entity();
+                                              win.open_dialog(cx, move |dialog, _win, _cx| {
+                                                let entity_clone = entity.clone();
+                                                dialog
+                                                    .confirm()
+                                                    .child("Are you sure you want to delete this connection?")
+                                                    .on_ok(move |_, window, cx| {
+                                                        cx.update_entity(&entity_clone.clone(), |entity, cx| {
+                                                          entity.delete_connection(window, cx);
+                                                          cx.notify();
+                                                        });
+
+                                                        // Notify delete
+                                                        window.push_notification("Deleted", cx);
+                                                        true
+                                                    })
+                                              });
                                             })),
                                     )
                                     .child(

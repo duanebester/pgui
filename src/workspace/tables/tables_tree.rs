@@ -1,24 +1,21 @@
 use gpui::{
     App, AppContext, ClickEvent, Context, Entity, EventEmitter, InteractiveElement, ParentElement,
-    Render, SharedString, Styled, Subscription, Window, actions, div, prelude::FluentBuilder as _,
-    px,
+    Render, Styled, Subscription, Window, actions, div, px,
 };
 
 use gpui_component::{
     ActiveTheme as _, Disableable, Icon, IconName, Sizable as _, StyledExt as _,
     button::{Button, ButtonVariants as _},
-    divider::Divider,
     h_flex,
     label::Label,
     list::ListItem,
-    select::{Select, SelectEvent, SelectState},
     tree::{TreeEntry, TreeItem, TreeState, tree},
     v_flex,
 };
 
 use crate::{
     services::{ConnectionInfo, DatabaseManager, TableInfo},
-    state::{ConnectionState, DatabaseState, change_database, disconnect},
+    state::ConnectionState,
 };
 
 pub enum TableEvent {
@@ -34,7 +31,6 @@ pub struct TablesTree {
     selected_item: Option<TreeItem>,
     db_manager: Option<DatabaseManager>,
     active_connection: Option<ConnectionInfo>,
-    db_select: Entity<SelectState<Vec<SharedString>>>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -134,73 +130,31 @@ impl TablesTree {
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let tree_state = cx.new(|cx| TreeState::new(cx));
-        let db_select = cx.new(|cx| SelectState::new(Vec::<SharedString>::new(), None, window, cx));
 
-        let _subscriptions = vec![
-            cx.observe_global_in::<ConnectionState>(window, move |this, win, cx| {
-                let state = cx.global::<ConnectionState>();
-                let active_connection = state.active_connection.clone();
+        let _subscriptions =
+            vec![
+                cx.observe_global_in::<ConnectionState>(window, move |this, _win, cx| {
+                    let state = cx.global::<ConnectionState>();
+                    let active_connection = state.active_connection.clone();
 
-                this.db_manager = Some(state.db_manager.clone());
-                this.active_connection = active_connection.clone();
-                if active_connection.is_some() {
-                    this.load_tables(cx);
-                } else {
-                    this.clear_tables(cx);
-                }
+                    this.db_manager = Some(state.db_manager.clone());
+                    this.active_connection = active_connection.clone();
+                    if active_connection.is_some() {
+                        this.load_tables(cx);
+                    } else {
+                        this.clear_tables(cx);
+                    }
 
-                if let Some(conn) = active_connection.clone() {
-                    cx.update_entity(&this.db_select.clone(), |select, cx| {
-                        select.set_selected_value(&conn.database.clone().into(), win, cx);
-                    });
-                }
-
-                cx.notify();
-            }),
-            cx.observe_global_in::<DatabaseState>(window, move |this, win, cx| {
-                let state = cx.global::<DatabaseState>();
-                let databases = state.databases.clone();
-
-                let databases: Vec<SharedString> = databases
-                    .iter()
-                    .map(|db| db.datname.clone().into())
-                    .collect();
-
-                cx.update_entity(&this.db_select.clone(), |select, cx| {
-                    select.set_items(databases, win, cx);
-                });
-
-                cx.notify();
-            }),
-        ];
-
-        cx.subscribe_in(&db_select, window, Self::on_select_database_event)
-            .detach();
+                    cx.notify();
+                }),
+            ];
 
         Self {
             tree_state,
-            db_select,
             selected_item: None,
             db_manager: None,
             active_connection: None,
             _subscriptions,
-        }
-    }
-
-    fn on_select_database_event(
-        &mut self,
-        _: &Entity<SelectState<Vec<SharedString>>>,
-        event: &SelectEvent<Vec<SharedString>>,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        // TODO: Check if the database name is different to active_connection
-        match event {
-            SelectEvent::Confirm(value) => {
-                if let Some(database) = value {
-                    change_database(database.to_string(), cx)
-                }
-            }
         }
     }
 
@@ -339,16 +293,6 @@ impl Render for TablesTree {
     ) -> impl gpui::IntoElement {
         let view = cx.entity();
 
-        let connection_name = self.active_connection.clone().map(|x| x.name.clone());
-
-        let disconnect_button = Button::new("disconnect_button")
-            .icon(Icon::empty().path("icons/unplug.svg"))
-            .small()
-            .danger()
-            .ghost()
-            .tooltip("Disconnect")
-            .on_click(|_evt, _win, cx| disconnect(cx));
-
         let refresh_button = Button::new("refresh")
             .icon(Icon::empty().path("icons/rotate-ccw.svg"))
             .small()
@@ -362,7 +306,7 @@ impl Render for TablesTree {
                 .h_flex()
                 .justify_between()
                 .items_center()
-                .child(Label::new("Tables").font_bold().text_sm())
+                .child(Label::new("Tables").font_bold().text_base())
                 .child(refresh_button),
         );
 
@@ -371,50 +315,6 @@ impl Render for TablesTree {
             .gap_2()
             .p_2()
             .on_action(cx.listener(Self::on_select_table_item))
-            .when(connection_name.is_some(), |d| {
-                d.child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap_2()
-                        .child(
-                            div()
-                                .flex()
-                                .justify_between()
-                                .items_center()
-                                .text_color(cx.theme().accent_foreground)
-                                .child(
-                                    Label::new(format!(
-                                        "Connected to {}",
-                                        connection_name.unwrap()
-                                    ))
-                                    .font_bold()
-                                    .text_sm(),
-                                )
-                                .child(disconnect_button),
-                        )
-                        .child(
-                            div()
-                                .flex()
-                                .flex_row()
-                                .px_2()
-                                .py_1()
-                                .border_1()
-                                .border_color(cx.theme().border)
-                                .rounded_lg()
-                                .items_center()
-                                .gap_2()
-                                .child(Icon::empty().path("icons/database.svg"))
-                                .child(Divider::vertical())
-                                .child(
-                                    Select::new(&self.db_select.clone())
-                                        .appearance(false)
-                                        .py_2(),
-                                ),
-                        ),
-                )
-            })
-            .child(Divider::horizontal())
             .child(header)
             .child(
                 tree(&self.tree_state, move |ix, entry, selected, _window, cx| {

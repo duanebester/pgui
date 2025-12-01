@@ -2,13 +2,10 @@
 
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::env;
 
 use super::messages::{AgentResponse, ToolCallData, ToolResultData};
-use super::types::{
-    ContentBlock, Message, PropertySchema, Tool, ToolDefinition, create_input_schema,
-};
+use super::types::{ContentBlock, Message, Tool, ToolDefinition};
 
 /// Agent that can converse with an LLM and execute tools
 #[derive(Clone)]
@@ -356,21 +353,69 @@ impl AgentBuilder {
 // Tool Helpers
 // ============================================================================
 
-/// Example tool: Get formatted schema as markdown
+/// Tool: Get database schema formatted as markdown
+/// When filter_tables is provided, returns schema for only those tables.
+/// When filter_tables is omitted or empty, returns schema for all tables.
 pub fn create_get_schema_tool() -> Tool {
-    let mut properties = HashMap::new();
-    properties.insert(
-        "table_name".to_string(),
-        PropertySchema {
-            property_type: "string".to_string(),
-            description: "The name of the database table to get schema for".to_string(),
-        },
-    );
-
     Tool {
         name: "get_schema".to_string(),
-        description: "Get the schema for a database table formatted as markdown".to_string(),
-        input_schema: create_input_schema(properties, vec![]),
+        description: "Get the database schema formatted as markdown. \
+            When filter_tables is provided, returns schema for only those specific tables. \
+            When filter_tables is omitted or empty, returns the complete schema for all tables."
+            .to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "filter_tables": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Optional list of table names to filter the schema. If not provided or empty, returns schema for all tables."
+                }
+            },
+            "required": []
+        }),
+    }
+}
+
+/// Tool: Get list of all tables in the database
+pub fn create_get_tables_tool() -> Tool {
+    Tool {
+        name: "get_tables".to_string(),
+        description: "Get a list of all tables in the database with their schema and type. \
+            Returns table_name, table_schema, and table_type for each table."
+            .to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {},
+            "required": []
+        }),
+    }
+}
+
+/// Tool: Get columns for a specific table
+pub fn create_get_table_columns_tool() -> Tool {
+    Tool {
+        name: "get_table_columns".to_string(),
+        description: "Get detailed column information for a specific table. \
+            Returns column_name, data_type, is_nullable, column_default, and ordinal_position."
+            .to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "table_name": {
+                    "type": "string",
+                    "description": "The name of the table to get columns for"
+                },
+                "table_schema": {
+                    "type": "string",
+                    "description": "The schema the table belongs to (e.g., 'public')",
+                    "default": "public"
+                }
+            },
+            "required": ["table_name"]
+        }),
     }
 }
 

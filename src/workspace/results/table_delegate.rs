@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use crate::services::{EnhancedQueryResult, ResultCell};
+use crate::services::{QueryResult, ResultCell};
 use gpui::*;
 use gpui_component::{
     ActiveTheme as _,
@@ -26,7 +26,7 @@ impl EnhancedResultsTableDelegate {
         }
     }
 
-    pub fn update(&mut self, result: EnhancedQueryResult) {
+    pub fn update(&mut self, result: QueryResult) {
         // Convert ResultRows to Vec<Vec<ResultCell>>
         let rows: Vec<Vec<ResultCell>> = result
             .rows

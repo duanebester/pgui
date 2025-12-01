@@ -219,6 +219,26 @@ INSERT INTO system_logs (log_level, message, module, user_id, ip_address) VALUES
   ('INFO', 'Product updated', 'products', 1, '192.168.1.100'),
   ('ERROR', 'Database connection timeout', 'database', NULL, NULL);
 
+  -- Create a view for order summaries
+  CREATE VIEW order_summary AS
+  SELECT
+    o.id,
+    o.order_number,
+    u.name as customer_name,
+    u.email as customer_email,
+    c.name as company_name,
+    os.name as status,
+    o.order_date,
+    o.total_amount,
+    COUNT(oi.id) as item_count
+  FROM orders o
+  JOIN users u ON o.user_id = u.id
+  LEFT JOIN companies c ON o.company_id = c.id
+  JOIN order_statuses os ON o.status_id = os.id
+  LEFT JOIN order_items oi ON o.id = oi.order_id
+  GROUP BY o.id, o.order_number, u.name, u.email, c.name, os.name, o.order_date, o.total_amount
+  ORDER BY o.order_date DESC;
+
 -- ============================================================================
 -- ADVANCED DATA TYPE TESTING TABLE
 -- This table contains various PostgreSQL data types for GUI testing
@@ -520,26 +540,6 @@ CREATE INDEX idx_order_items_order ON order_items(order_id);
 CREATE INDEX idx_order_items_product ON order_items(product_id);
 CREATE INDEX idx_system_logs_created ON system_logs(created_at);
 CREATE INDEX idx_system_logs_level ON system_logs(log_level);
-
--- Create a view for order summaries
-CREATE VIEW order_summary AS
-SELECT
-  o.id,
-  o.order_number,
-  u.name as customer_name,
-  u.email as customer_email,
-  c.name as company_name,
-  os.name as status,
-  o.order_date,
-  o.total_amount,
-  COUNT(oi.id) as item_count
-FROM orders o
-JOIN users u ON o.user_id = u.id
-LEFT JOIN companies c ON o.company_id = c.id
-JOIN order_statuses os ON o.status_id = os.id
-LEFT JOIN order_items oi ON o.id = oi.order_id
-GROUP BY o.id, o.order_number, u.name, u.email, c.name, os.name, o.order_date, o.total_amount
-ORDER BY o.order_date DESC;
 
 -- Create a view for the advanced types test to make it easier to query
 CREATE VIEW advanced_types_summary AS

@@ -3,7 +3,7 @@
 //! This module contains:
 //! - `SslMode` - SSL mode options for PostgreSQL connections
 //! - `ConnectionInfo` - PostgreSQL connection configuration
-
+use chrono::{DateTime, Utc};
 use gpui::SharedString;
 use gpui_component::select::SelectItem;
 use serde::{Deserialize, Serialize};
@@ -211,4 +211,17 @@ impl Drop for ConnectionInfo {
             ptr::write_volatile(&mut self.password, String::new());
         }
     }
+}
+
+/// Query history entry
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueryHistoryEntry {
+    pub id: Uuid,
+    pub connection_id: Uuid,
+    pub sql: String,
+    pub execution_time_ms: i64,
+    pub rows_affected: Option<i64>,
+    pub success: bool,
+    pub error_message: Option<String>,
+    pub executed_at: DateTime<Utc>,
 }

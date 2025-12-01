@@ -7,19 +7,18 @@ use std::time::Duration;
 
 use gpui::*;
 
-use crate::services::{ConnectionInfo, ConnectionsStore, DatabaseManager};
+use crate::services::{AppStore, ConnectionInfo, ConnectionsRepository, DatabaseManager};
 
 use super::connection::{ConnectionState, ConnectionStatus};
 use super::database::DatabaseState;
 use super::editor::EditorState;
-use super::llm::LLMState;
 
 // =============================================================================
 // Connection Lifecycle
 // =============================================================================
 
 /// Initiates a connection to the database.
-/// Updates ConnectionState, EditorState, DatabaseState, and LLMState on success.
+/// Updates ConnectionState, EditorState, and DatabaseState on success.
 pub fn connect(connection_info: &ConnectionInfo, cx: &mut App) {
     cx.update_global::<ConnectionState, _>(|state, _cx| {
         state.connection_state = ConnectionStatus::Connecting;
@@ -69,9 +68,9 @@ pub fn change_database(database_name: String, cx: &mut App) {
 /// Adds a new connection to the saved connections store.
 pub fn add_connection(connection: ConnectionInfo, cx: &mut App) {
     cx.spawn(async move |cx| {
-        if let Ok(store) = ConnectionsStore::new().await {
-            if let Ok(_) = store.create_connection(&connection).await {
-                if let Ok(connections) = store.load_connections().await {
+        if let Ok(store) = AppStore::singleton().await {
+            if let Ok(_) = store.connections().create(&connection).await {
+                if let Ok(connections) = store.connections().load_all().await {
                     let _ = cx.update_global::<ConnectionState, _>(|app_state, _cx| {
                         app_state.saved_connections = connections;
                         app_state.active_connection = None;
@@ -86,9 +85,9 @@ pub fn add_connection(connection: ConnectionInfo, cx: &mut App) {
 /// Updates an existing connection in the saved connections store.
 pub fn update_connection(connection: ConnectionInfo, cx: &mut App) {
     cx.spawn(async move |cx| {
-        if let Ok(store) = ConnectionsStore::new().await {
-            if let Ok(_) = store.update_connection(&connection).await {
-                if let Ok(connections) = store.load_connections().await {
+        if let Ok(store) = AppStore::singleton().await {
+            if let Ok(_) = store.connections().update(&connection).await {
+                if let Ok(connections) = store.connections().load_all().await {
                     let _ = cx.update_global::<ConnectionState, _>(|app_state, _cx| {
                         app_state.saved_connections = connections;
                         app_state.active_connection = Some(connection);
@@ -104,9 +103,9 @@ pub fn update_connection(connection: ConnectionInfo, cx: &mut App) {
 pub fn delete_connection(connection: ConnectionInfo, cx: &mut App) {
     let conn = connection.clone();
     cx.spawn(async move |cx| {
-        if let Ok(store) = ConnectionsStore::new().await {
-            if let Ok(_) = store.delete_connection(&conn.id).await {
-                if let Ok(connections) = store.load_connections().await {
+        if let Ok(store) = AppStore::singleton().await {
+            if let Ok(_) = store.connections().delete(&conn.id).await {
+                if let Ok(connections) = store.connections().load_all().await {
                     let _ = cx.update_global::<ConnectionState, _>(|app_state, _cx| {
                         app_state.saved_connections = connections;
                     });
@@ -123,7 +122,7 @@ pub fn delete_connection(connection: ConnectionInfo, cx: &mut App) {
 
 async fn connect_async(mut cic: ConnectionInfo, db_manager: DatabaseManager, cx: &mut AsyncApp) {
     // Load password from keychain on-demand
-    if let Ok(password) = ConnectionsStore::get_connection_password(&cic.id) {
+    if let Ok(password) = ConnectionsRepository::get_connection_password(&cic.id) {
         cic.password = password;
     } else {
         let _ = cx.update_global::<ConnectionState, _>(|state, _cx| {
@@ -152,13 +151,6 @@ async fn connect_async(mut cic: ConnectionInfo, db_manager: DatabaseManager, cx:
             state.active_connection = Some(cic);
             state.connection_state = ConnectionStatus::Connected;
         });
-
-        if let Ok(schema) = db_manager.get_schema(None).await {
-            let llm_schema = Some(db_manager.format_schema_for_llm(&schema).into());
-            let _ = cx.update_global::<LLMState, _>(|state, _cx| {
-                state.llm_schema = llm_schema;
-            });
-        }
 
         // Connection monitoring loop
         loop {
@@ -204,9 +196,6 @@ async fn disconnect_async(db_manager: DatabaseManager, cx: &mut AsyncApp) {
         let _ = cx.update_global::<ConnectionState, _>(|state, _cx| {
             state.active_connection = None;
             state.connection_state = ConnectionStatus::Disconnected;
-        });
-        let _ = cx.update_global::<LLMState, _>(|state, _cx| {
-            state.llm_schema = None;
         });
     }
 }

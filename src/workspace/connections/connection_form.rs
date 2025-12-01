@@ -7,7 +7,7 @@ use gpui_component::{
 };
 
 use crate::{
-    services::{ConnectionInfo, ConnectionsStore, SslMode},
+    services::{ConnectionInfo, ConnectionsRepository, SslMode},
     state::{add_connection, connect, delete_connection, update_connection},
 };
 
@@ -152,7 +152,7 @@ impl ConnectionForm {
         // For editing: if password is empty, try to fetch from keychain
         let password = if password.is_empty() {
             if let Some(ref active) = self.active_connection {
-                ConnectionsStore::get_connection_password(&active.id).unwrap_or_default()
+                ConnectionsRepository::get_connection_password(&active.id).unwrap_or_default()
             } else {
                 password.to_string()
             }

@@ -8,7 +8,7 @@ Written in [GPUI](https://gpui.rs) with [GPUI Component](https://github.com/long
 
 ### Connections
 
-Connections will be saved to a sqlite db file in `~/.pgui/connections.db`
+Connections and query history will be saved to a sqlite db file in `~/.pgui/pgui.db`
 
 Passwords are saved in the host OS secure store via Keyring crate.
 

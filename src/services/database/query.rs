@@ -4,26 +4,33 @@ use sqlx::query::Query;
 use sqlx::{Column, PgPool, Row, TypeInfo, ValueRef};
 use std::collections::{HashMap, HashSet};
 
+use crate::services::database::types::{ErrorResult, ModifiedResult};
+
 use super::manager::DatabaseManager;
 use super::types::{
-    EnhancedQueryExecutionResult, EnhancedQueryResult, ResultCell, ResultColumnMetadata, ResultRow,
-    TableMetadata,
+    QueryExecutionResult, QueryResult, ResultCell, ResultColumnMetadata, ResultRow, TableMetadata,
 };
 
 impl DatabaseManager {
-    pub async fn execute_query_enhanced(&self, sql: &str) -> EnhancedQueryExecutionResult {
+    pub async fn execute_query_enhanced(&self, sql: &str) -> QueryExecutionResult {
         let pool_guard = self.pool.read().await;
 
         let pool = match pool_guard.as_ref() {
             Some(pool) => pool,
             None => {
-                return EnhancedQueryExecutionResult::Error("Database not connected".to_string());
+                return QueryExecutionResult::Error(ErrorResult {
+                    message: "Database not connected".to_string(),
+                    execution_time_ms: 0,
+                });
             }
         };
 
         let sql = sql.trim();
         if sql.is_empty() {
-            return EnhancedQueryExecutionResult::Error("Empty query".to_string());
+            return QueryExecutionResult::Error(ErrorResult {
+                message: "Empty query".to_string(),
+                execution_time_ms: 0,
+            });
         }
 
         if is_select_query(sql) {
@@ -33,26 +40,28 @@ impl DatabaseManager {
         }
     }
 
-    async fn execute_select_query(&self, sql: &str, pool: &PgPool) -> EnhancedQueryExecutionResult {
+    async fn execute_select_query(&self, sql: &str, pool: &PgPool) -> QueryExecutionResult {
         let q = sqlx::query(sql);
         self.execute_base_query(q, pool).await
     }
 
-    async fn execute_modification_query(
-        &self,
-        sql: &str,
-        pool: &PgPool,
-    ) -> EnhancedQueryExecutionResult {
+    async fn execute_modification_query(&self, sql: &str, pool: &PgPool) -> QueryExecutionResult {
         let start_time = std::time::Instant::now();
         match sqlx::query(sql).execute(pool).await {
             Ok(result) => {
-                let execution_time = start_time.elapsed().as_millis();
-                EnhancedQueryExecutionResult::Modified {
+                let execution_time_ms = start_time.elapsed().as_millis();
+                QueryExecutionResult::Modified(ModifiedResult {
                     rows_affected: result.rows_affected(),
-                    execution_time_ms: execution_time,
-                }
+                    execution_time_ms,
+                })
             }
-            Err(e) => EnhancedQueryExecutionResult::Error(format!("Query failed: {}", e)),
+            Err(e) => {
+                let execution_time_ms = start_time.elapsed().as_millis();
+                QueryExecutionResult::Error(ErrorResult {
+                    message: format!("Query failed: {}", e),
+                    execution_time_ms,
+                })
+            }
         }
     }
 
@@ -60,14 +69,14 @@ impl DatabaseManager {
         &self,
         query: Query<'_, sqlx::Postgres, sqlx::postgres::PgArguments>,
         pool: &PgPool,
-    ) -> EnhancedQueryExecutionResult {
+    ) -> QueryExecutionResult {
         let start_time = std::time::Instant::now();
         match query.fetch_all(pool).await {
             Ok(rows) => {
                 let execution_time = start_time.elapsed().as_millis();
 
                 if rows.is_empty() {
-                    return EnhancedQueryExecutionResult::Select(EnhancedQueryResult {
+                    return QueryExecutionResult::Select(QueryResult {
                         columns: vec![],
                         rows: vec![],
                         row_count: 0,
@@ -79,14 +88,20 @@ impl DatabaseManager {
                 let columns = build_column_metadata(&rows[0], &metadata);
                 let result_rows = convert_rows(&rows, &metadata);
 
-                EnhancedQueryExecutionResult::Select(EnhancedQueryResult {
+                QueryExecutionResult::Select(QueryResult {
                     columns,
                     rows: result_rows,
                     row_count: rows.len(),
                     execution_time_ms: execution_time,
                 })
             }
-            Err(e) => EnhancedQueryExecutionResult::Error(format!("Query failed: {}", e)),
+            Err(e) => {
+                let execution_time_ms = start_time.elapsed().as_millis();
+                QueryExecutionResult::Error(ErrorResult {
+                    message: format!("Query failed: {}", e),
+                    execution_time_ms,
+                })
+            }
         }
     }
 }

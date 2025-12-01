@@ -4,6 +4,7 @@ use gpui::{AppContext, AsyncApp, WeakEntity};
 use crate::{
     services::agent::{
         Agent, AgentRequest, AgentResponse, ContentBlock, UiMessage, create_get_schema_tool,
+        create_get_table_columns_tool, create_get_tables_tool,
     },
     workspace::agent::{panel::AgentPanel, tools::execute_tools},
 };
@@ -20,7 +21,11 @@ pub async fn handle_outgoing(
             .to_string(),
         )
         .max_tokens(4096)
-        .build(vec![create_get_schema_tool()])
+        .build(vec![
+            create_get_schema_tool(),
+            create_get_tables_tool(),
+            create_get_table_columns_tool(),
+        ])
         .ok()
     {
         while let Ok(request) = outgoing_rx.recv().await {

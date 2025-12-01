@@ -3,8 +3,8 @@ use sqlx::Row;
 
 use super::manager::DatabaseManager;
 use super::types::{
-    ColumnDetail, ConstraintInfo, DatabaseInfo, DatabaseSchema, EnhancedQueryExecutionResult,
-    ForeignKeyInfo, IndexInfo, TableInfo, TableSchema,
+    ColumnDetail, ConstraintInfo, DatabaseInfo, DatabaseSchema, ForeignKeyInfo, IndexInfo,
+    QueryExecutionResult, TableInfo, TableSchema,
 };
 
 impl DatabaseManager {
@@ -68,7 +68,7 @@ impl DatabaseManager {
         &self,
         table_name: &str,
         table_schema: &str,
-    ) -> Result<EnhancedQueryExecutionResult> {
+    ) -> Result<QueryExecutionResult> {
         let pool_guard = self.pool.read().await;
         let pool = pool_guard
             .as_ref()
@@ -368,140 +368,5 @@ impl DatabaseManager {
                 check_clause: row.get("check_clause"),
             })
             .collect())
-    }
-
-    /// Generates a human-readable schema description for LLM consumption
-    pub fn format_schema_for_llm(&self, schema: &DatabaseSchema) -> String {
-        let mut output = String::new();
-
-        output.push_str(&format!(
-            "# Database Schema ({} tables)\n\n",
-            schema.total_tables
-        ));
-
-        for table in &schema.tables {
-            self.format_table_for_llm(table, &mut output);
-        }
-
-        output
-    }
-
-    fn format_table_for_llm(&self, table: &TableSchema, output: &mut String) {
-        output.push_str(&format!(
-            "## Table: {}.{}\n",
-            table.table_schema, table.table_name
-        ));
-        output.push_str(&format!("Type: {}\n", table.table_type));
-
-        if let Some(ref desc) = table.description {
-            output.push_str(&format!("Description: {}\n", desc));
-        }
-        output.push('\n');
-
-        // Columns
-        output.push_str("### Columns:\n");
-        for col in &table.columns {
-            self.format_column_for_llm(col, output);
-        }
-        output.push('\n');
-
-        // Primary Keys
-        if !table.primary_keys.is_empty() {
-            output.push_str(&format!(
-                "### Primary Key: {}\n\n",
-                table.primary_keys.join(", ")
-            ));
-        }
-
-        // Foreign Keys
-        if !table.foreign_keys.is_empty() {
-            output.push_str("### Foreign Keys:\n");
-            for fk in &table.foreign_keys {
-                output.push_str(&format!(
-                    "- **{}** → {}.{}.{}\n",
-                    fk.column_name,
-                    fk.foreign_table_schema,
-                    fk.foreign_table_name,
-                    fk.foreign_column_name
-                ));
-            }
-            output.push('\n');
-        }
-
-        // Indexes
-        if !table.indexes.is_empty() {
-            output.push_str("### Indexes:\n");
-            for idx in &table.indexes {
-                let unique = if idx.is_unique { "UNIQUE" } else { "" };
-                let primary = if idx.is_primary { "PRIMARY" } else { "" };
-                let flags = [unique, primary]
-                    .iter()
-                    .filter(|s| !s.is_empty())
-                    .copied()
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                let flags_str = if !flags.is_empty() {
-                    format!(" [{}]", flags)
-                } else {
-                    String::new()
-                };
-
-                output.push_str(&format!(
-                    "- **{}** ({}):{} {}\n",
-                    idx.index_name,
-                    idx.index_type,
-                    flags_str,
-                    idx.columns.join(", ")
-                ));
-            }
-            output.push('\n');
-        }
-
-        // Constraints
-        if !table.constraints.is_empty() {
-            output.push_str("### Constraints:\n");
-            for constraint in &table.constraints {
-                output.push_str(&format!(
-                    "- **{}** ({}): {}",
-                    constraint.constraint_name,
-                    constraint.constraint_type,
-                    constraint.columns.join(", ")
-                ));
-
-                if let Some(ref check) = constraint.check_clause {
-                    output.push_str(&format!(" WHERE {}", check));
-                }
-                output.push('\n');
-            }
-            output.push('\n');
-        }
-
-        output.push_str("---\n\n");
-    }
-
-    fn format_column_for_llm(&self, col: &ColumnDetail, output: &mut String) {
-        let nullable = if col.is_nullable { "NULL" } else { "NOT NULL" };
-        let mut col_line = format!("- **{}**: {} {}", col.column_name, col.data_type, nullable);
-
-        if let Some(ref default) = col.column_default {
-            col_line.push_str(&format!(" DEFAULT {}", default));
-        }
-
-        if let Some(len) = col.character_maximum_length {
-            col_line.push_str(&format!(" (max length: {})", len));
-        }
-
-        if let Some(prec) = col.numeric_precision {
-            if let Some(scale) = col.numeric_scale {
-                col_line.push_str(&format!(" (precision: {}, scale: {})", prec, scale));
-            }
-        }
-
-        if let Some(ref desc) = col.description {
-            col_line.push_str(&format!(" - {}", desc));
-        }
-
-        output.push_str(&col_line);
-        output.push('\n');
     }
 }

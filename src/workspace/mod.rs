@@ -3,6 +3,7 @@ mod connections;
 mod editor;
 mod footer_bar;
 mod header_bar;
+mod history;
 mod results;
 mod tables;
 mod workspace;

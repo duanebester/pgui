@@ -1,6 +1,6 @@
 use gpui::*;
 
-use crate::services::{ConnectionInfo, ConnectionsStore, DatabaseManager};
+use crate::services::{AppStore, ConnectionInfo, DatabaseManager};
 
 #[derive(Clone, PartialEq)]
 pub enum ConnectionStatus {
@@ -32,8 +32,8 @@ impl ConnectionState {
 
         // Load saved connections on startup
         cx.spawn(async move |cx| {
-            if let Ok(store) = ConnectionsStore::new().await {
-                if let Ok(connections) = store.load_connections().await {
+            if let Ok(store) = AppStore::singleton().await {
+                if let Ok(connections) = store.connections().load_all().await {
                     let _ = cx.update_global::<ConnectionState, _>(|app_state, _cx| {
                         app_state.saved_connections = connections;
                     });

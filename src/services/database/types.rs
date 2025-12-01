@@ -102,22 +102,31 @@ pub struct ResultRow {
 
 /// Enhanced query result with full metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EnhancedQueryResult {
+pub struct QueryResult {
     pub columns: Vec<ResultColumnMetadata>,
     pub rows: Vec<ResultRow>,
     pub row_count: usize,
     pub execution_time_ms: u128,
 }
 
-/// Result of an enhanced query execution
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModifiedResult {
+    pub rows_affected: u64,
+    pub execution_time_ms: u128,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ErrorResult {
+    pub message: String,
+    pub execution_time_ms: u128,
+}
+
+/// Result of an query execution
 #[derive(Debug, Clone)]
-pub enum EnhancedQueryExecutionResult {
-    Select(EnhancedQueryResult),
-    Modified {
-        rows_affected: u64,
-        execution_time_ms: u128,
-    },
-    Error(String),
+pub enum QueryExecutionResult {
+    Select(QueryResult),
+    Modified(ModifiedResult),
+    Error(ErrorResult),
 }
 
 /// Internal metadata for table/column resolution

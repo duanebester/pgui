@@ -11,6 +11,7 @@ pub struct FooterBar {
     active_connection: Option<ConnectionInfo>,
     tables_active: bool,
     agent_active: bool,
+    history_active: bool,
     is_connected: bool,
     _subscriptions: Vec<Subscription>,
 }
@@ -18,6 +19,7 @@ pub struct FooterBar {
 pub enum FooterBarEvent {
     ToggleTables(bool), // true = show
     ToggleAgent(bool),
+    ToggleHistory(bool),
 }
 
 impl EventEmitter<FooterBarEvent> for FooterBar {}
@@ -35,6 +37,7 @@ impl FooterBar {
             active_connection: None,
             tables_active: true,
             agent_active: false,
+            history_active: false,
             is_connected: false,
             _subscriptions,
         }
@@ -72,8 +75,28 @@ impl Render for FooterBar {
                 this.agent_active = !this.agent_active;
                 if this.agent_active {
                     cx.emit(FooterBarEvent::ToggleAgent(true));
+                    this.history_active = false;
+                    cx.emit(FooterBarEvent::ToggleHistory(false));
                 } else {
                     cx.emit(FooterBarEvent::ToggleAgent(false));
+                }
+                cx.notify();
+            }));
+
+        let history_button = Button::new("history_button")
+            .icon(Icon::empty().path("icons/history.svg"))
+            .small()
+            .ghost()
+            .selected(self.history_active.clone())
+            .tooltip("Toggle History Panel")
+            .on_click(cx.listener(|this, _evt, _win, cx| {
+                this.history_active = !this.history_active;
+                if this.history_active {
+                    cx.emit(FooterBarEvent::ToggleHistory(true));
+                    this.agent_active = false;
+                    cx.emit(FooterBarEvent::ToggleAgent(false));
+                } else {
+                    cx.emit(FooterBarEvent::ToggleHistory(false));
                 }
                 cx.notify();
             }));
@@ -105,14 +128,23 @@ impl Render for FooterBar {
                     .opacity(0.6)
             });
 
-        let controls = div()
+        let left_controls = div()
             .flex()
             .flex_row()
             .justify_between()
             .items_center()
-            .gap_2()
+            .gap_1()
             .when(!self.is_connected.clone(), |d| d.invisible())
-            .child(tables_button)
+            .child(tables_button);
+
+        let right_controls = div()
+            .flex()
+            .flex_row()
+            .justify_between()
+            .items_center()
+            .gap_1()
+            .when(!self.is_connected.clone(), |d| d.invisible())
+            .child(history_button)
             .child(agent_button);
 
         let footer = div()
@@ -123,7 +155,12 @@ impl Render for FooterBar {
             .w_full()
             .py_1()
             .px_2()
-            .child(controls);
+            .flex()
+            .flex_row()
+            .justify_between()
+            .items_center()
+            .child(left_controls)
+            .child(right_controls);
 
         footer
     }

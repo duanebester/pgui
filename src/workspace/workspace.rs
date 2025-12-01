@@ -5,9 +5,12 @@ use super::footer_bar::{FooterBar, FooterBarEvent};
 use super::header_bar::HeaderBar;
 use super::tables::{TableEvent, TablesTree};
 
-use crate::services::{EnhancedQueryExecutionResult, TableInfo};
+use crate::services::AppStore;
+use crate::services::{ErrorResult, QueryExecutionResult, TableInfo};
 use crate::state::{ConnectionState, ConnectionStatus};
 use crate::workspace::agent::AgentPanel;
+use crate::workspace::history::HistoryEvent;
+use crate::workspace::history::HistoryPanel;
 use crate::workspace::results::ResultsPanel;
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
@@ -24,11 +27,13 @@ pub struct Workspace {
     tables_tree: Entity<TablesTree>,
     editor: Entity<Editor>,
     agent_panel: Entity<AgentPanel>,
+    history_panel: Entity<HistoryPanel>,
     connection_manager: Entity<ConnectionManager>,
     results_panel: Entity<ResultsPanel>,
     _subscriptions: Vec<Subscription>,
     show_tables: bool,
     show_agent: bool,
+    show_history: bool,
 }
 
 impl Workspace {
@@ -37,6 +42,7 @@ impl Workspace {
         let footer_bar = FooterBar::view(window, cx);
         let tables_tree = TablesTree::view(window, cx);
         let agent_panel = AgentPanel::view(window, cx);
+        let history_panel = HistoryPanel::view(window, cx);
         let editor = Editor::view(window, cx);
         let results_panel = ResultsPanel::view(window, cx);
         let connection_manager = ConnectionManager::view(window, cx);
@@ -62,9 +68,22 @@ impl Workspace {
                     FooterBarEvent::ToggleAgent(show) => {
                         this.show_agent = *show;
                     }
+                    FooterBarEvent::ToggleHistory(show) => {
+                        this.show_history = *show;
+                    }
                 }
                 cx.notify();
             }),
+            // Subscribe to history panel events
+            cx.subscribe_in(
+                &history_panel,
+                window,
+                |this, _, event: &HistoryEvent, win, cx| match event {
+                    HistoryEvent::LoadQuery(sql) => {
+                        this.load_query_into_editor(sql.clone(), win, cx);
+                    }
+                },
+            ),
         ];
 
         Self {
@@ -74,16 +93,24 @@ impl Workspace {
             tables_tree,
             editor,
             agent_panel,
+            history_panel,
             results_panel,
             _subscriptions,
             connection_state: ConnectionStatus::Disconnected,
             show_tables: true,
             show_agent: false,
+            show_history: false,
         }
     }
 
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|cx| Self::new(window, cx))
+    }
+
+    fn load_query_into_editor(&mut self, sql: String, window: &mut Window, cx: &mut App) {
+        self.editor.update(cx, |editor, cx| {
+            editor.set_query(sql, window, cx);
+        });
     }
 
     fn execute_query(&mut self, query: String, cx: &mut Context<Self>) {
@@ -94,9 +121,20 @@ impl Workspace {
 
         // Get database manager from global state
         let db_manager = cx.global::<ConnectionState>().db_manager.clone();
+        let active_connection = cx.global::<ConnectionState>().active_connection.clone();
 
         cx.spawn(async move |this, cx| {
             let result = db_manager.execute_query_enhanced(&query).await;
+            // Extract execution info before moving result
+            let (execution_time_ms, rows_affected) = match &result {
+                QueryExecutionResult::Modified(modified) => (
+                    Some(modified.execution_time_ms as i64),
+                    Some(modified.rows_affected as i64),
+                ),
+                QueryExecutionResult::Select(r) => (Some(r.execution_time_ms as i64), None),
+                QueryExecutionResult::Error(err) => (Some(err.execution_time_ms as i64), None),
+            };
+
             this.update(cx, |this, cx| {
                 // Update results panel
                 this.results_panel.update(cx, |results, cx| {
@@ -111,6 +149,22 @@ impl Workspace {
                 cx.notify();
             })
             .ok();
+
+            if let Some(conn) = active_connection {
+                if let Ok(store) = AppStore::singleton().await {
+                    let _ = store
+                        .history()
+                        .record(
+                            &conn.id,
+                            &query.clone(),
+                            execution_time_ms.unwrap_or(0),
+                            rows_affected,
+                            true,
+                            None,
+                        )
+                        .await;
+                }
+            }
         })
         .detach();
     }
@@ -142,10 +196,10 @@ impl Workspace {
                     Err(e) => {
                         this.results_panel.update(cx, |results, cx| {
                             results.update_result(
-                                EnhancedQueryExecutionResult::Error(format!(
-                                    "Failed to load table columns: {}",
-                                    e
-                                )),
+                                QueryExecutionResult::Error(ErrorResult {
+                                    execution_time_ms: 0,
+                                    message: format!("Failed to load table columns: {}", e),
+                                }),
                                 cx,
                             );
                         });
@@ -190,6 +244,16 @@ impl Workspace {
             .border_l_1()
             .child(self.agent_panel.clone());
 
+        let history = div()
+            .id("connected-history")
+            .flex()
+            .flex_col()
+            .h_full()
+            .w(px(400.))
+            .border_color(cx.theme().border)
+            .border_l_1()
+            .child(self.history_panel.clone());
+
         let main = div()
             .id("connected-main")
             .flex()
@@ -222,7 +286,8 @@ impl Workspace {
             .bg(cx.theme().background)
             .when(self.show_tables.clone(), |d| d.child(sidebar))
             .child(main)
-            .when(self.show_agent.clone(), |d| d.child(agent));
+            .when(self.show_agent.clone(), |d| d.child(agent))
+            .when(self.show_history.clone(), |d| d.child(history));
 
         content
     }

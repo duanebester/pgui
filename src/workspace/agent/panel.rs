@@ -269,7 +269,6 @@ impl Render for AgentPanel {
                                 Button::new("btn-send")
                                     .tooltip("send")
                                     .ghost()
-                                    .pr_2()
                                     .small()
                                     .loading(self.is_loading)
                                     .icon(Icon::empty().path("icons/send.svg"))

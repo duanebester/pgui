@@ -1,6 +1,4 @@
-use crate::{
-    services::EnhancedQueryExecutionResult, workspace::results::EnhancedResultsTableDelegate,
-};
+use crate::{services::QueryExecutionResult, workspace::results::EnhancedResultsTableDelegate};
 use gpui::*;
 use gpui_component::{
     ActiveTheme as _, h_flex,
@@ -10,7 +8,7 @@ use gpui_component::{
 };
 
 pub struct ResultsPanel {
-    current_result: Option<EnhancedQueryExecutionResult>,
+    current_result: Option<QueryExecutionResult>,
     table: Entity<TableState<EnhancedResultsTableDelegate>>,
 }
 
@@ -29,9 +27,9 @@ impl ResultsPanel {
         cx.new(|cx| Self::new(window, cx))
     }
 
-    pub fn update_result(&mut self, result: EnhancedQueryExecutionResult, cx: &mut Context<Self>) {
+    pub fn update_result(&mut self, result: QueryExecutionResult, cx: &mut Context<Self>) {
         self.current_result = Some(result.clone());
-        if let EnhancedQueryExecutionResult::Select(x) = result {
+        if let QueryExecutionResult::Select(x) = result {
             self.table.update(cx, |table, cx| {
                 table.delegate_mut().update(x.clone());
                 table.refresh(cx);
@@ -44,22 +42,21 @@ impl ResultsPanel {
 impl Render for ResultsPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         match &self.current_result {
-            Some(EnhancedQueryExecutionResult::Select(_result)) => v_flex()
+            Some(QueryExecutionResult::Select(_result)) => v_flex()
                 .size_full()
                 .p_4()
                 .child(Table::new(&self.table.clone()).stripe(true)),
-            Some(EnhancedQueryExecutionResult::Modified {
-                rows_affected,
-                execution_time_ms,
-            }) => h_flex().size_full().items_center().justify_center().child(
-                Label::new(format!(
-                    "Query executed successfully. {} rows affected in {}ms",
-                    rows_affected, execution_time_ms
-                ))
-                .text_sm()
-                .text_color(cx.theme().accent_foreground),
-            ),
-            Some(EnhancedQueryExecutionResult::Error(error)) => v_flex().size_full().p_4().child(
+            Some(QueryExecutionResult::Modified(modified)) => {
+                h_flex().size_full().items_center().justify_center().child(
+                    Label::new(format!(
+                        "Query executed successfully. {} rows affected in {}ms",
+                        modified.rows_affected, modified.execution_time_ms
+                    ))
+                    .text_sm()
+                    .text_color(cx.theme().accent_foreground),
+                )
+            }
+            Some(QueryExecutionResult::Error(error)) => v_flex().size_full().p_4().child(
                 div()
                     .p_4()
                     .bg(cx.theme().danger)
@@ -67,7 +64,7 @@ impl Render for ResultsPanel {
                     .border_color(cx.theme().danger)
                     .rounded(cx.theme().radius)
                     .child(
-                        Label::new(format!("Error: {}", error))
+                        Label::new(format!("Error: {}", error.message))
                             .text_sm()
                             .text_color(cx.theme().danger_foreground),
                     ),

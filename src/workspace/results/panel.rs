@@ -1,11 +1,22 @@
-use crate::{services::QueryExecutionResult, workspace::results::EnhancedResultsTableDelegate};
+use crate::{
+    services::{QueryExecutionResult, export_to_csv, export_to_json},
+    workspace::results::EnhancedResultsTableDelegate,
+};
 use gpui::*;
 use gpui_component::{
-    ActiveTheme as _, h_flex,
+    ActiveTheme as _, Icon, Sizable as _, WindowExt as _,
+    button::{Button, ButtonVariants as _},
+    h_flex,
     label::Label,
+    notification::NotificationType,
     table::{Table, TableState},
     v_flex,
 };
+
+pub enum ExportFormat {
+    Csv,
+    Json,
+}
 
 pub struct ResultsPanel {
     current_result: Option<QueryExecutionResult>,
@@ -37,6 +48,91 @@ impl ResultsPanel {
         }
         cx.notify();
     }
+
+    fn export_results(
+        &mut self,
+        format: ExportFormat,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(QueryExecutionResult::Select(result)) = &self.current_result else {
+            return;
+        };
+
+        let result = result.clone();
+        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+
+        let (_extension, suggested_name) = match format {
+            ExportFormat::Csv => ("csv", format!("export_{}.csv", timestamp)),
+            ExportFormat::Json => ("json", format!("export_{}.json", timestamp)),
+        };
+
+        // Use GPUI's native file dialog
+        let home = dirs::home_dir().unwrap_or_default();
+        let receiver = cx.prompt_for_new_path(&home, Some(&suggested_name));
+
+        cx.spawn_in(window, async move |_this, cx| {
+            if let Ok(Ok(Some(path))) = receiver.await {
+                let result: anyhow::Result<()> = async {
+                    let content = match format {
+                        ExportFormat::Csv => export_to_csv(&result)?,
+                        ExportFormat::Json => export_to_json(&result)?,
+                    };
+                    async_fs::write(&path, content).await?;
+                    Ok(())
+                }
+                .await;
+
+                if let Err(e) = result {
+                    eprintln!("Export failed: {}", e);
+                    let _ = cx.update(|window, cx| {
+                        window.push_notification(
+                            (
+                                NotificationType::Error,
+                                "Failed to save file. Please try again.",
+                            ),
+                            cx,
+                        );
+                    });
+                } else {
+                    let _ = cx.update(|window, cx| {
+                        window.push_notification(
+                            (NotificationType::Info, "File saved successfully."),
+                            cx,
+                        );
+                    });
+                }
+            }
+        })
+        .detach();
+    }
+
+    fn render_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        h_flex()
+            .gap_1()
+            .justify_end()
+            .items_center()
+            .child(
+                Button::new("export-csv")
+                    .icon(Icon::empty().path("icons/file-spreadsheet.svg"))
+                    .small()
+                    .ghost()
+                    .tooltip("Export CSV")
+                    .on_click(cx.listener(|this, _, win, cx| {
+                        this.export_results(ExportFormat::Csv, win, cx);
+                    })),
+            )
+            .child(
+                Button::new("export-json")
+                    .icon(Icon::empty().path("icons/file-braces.svg"))
+                    .small()
+                    .ghost()
+                    .tooltip("Export JSON")
+                    .on_click(cx.listener(|this, _, win, cx| {
+                        this.export_results(ExportFormat::Json, win, cx);
+                    })),
+            )
+    }
 }
 
 impl Render for ResultsPanel {
@@ -44,7 +140,11 @@ impl Render for ResultsPanel {
         match &self.current_result {
             Some(QueryExecutionResult::Select(_result)) => v_flex()
                 .size_full()
-                .p_4()
+                .p_2()
+                .flex()
+                .flex_col()
+                .gap_1()
+                .child(self.render_toolbar(cx))
                 .child(Table::new(&self.table.clone()).stripe(true)),
             Some(QueryExecutionResult::Modified(modified)) => {
                 h_flex().size_full().items_center().justify_center().child(

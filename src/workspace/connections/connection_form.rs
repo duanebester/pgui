@@ -3,11 +3,12 @@ use gpui_component::{
     button::{Button, ButtonVariants as _},
     form::{field, v_form},
     input::{Input, InputState},
+    notification::NotificationType,
     *,
 };
 
 use crate::{
-    services::{ConnectionInfo, ConnectionsRepository, SslMode},
+    services::{ConnectionInfo, ConnectionsRepository, DatabaseManager, SslMode},
     state::{add_connection, connect, delete_connection, update_connection},
 };
 
@@ -27,6 +28,7 @@ pub struct ConnectionForm {
     database: Entity<InputState>,
     port: Entity<InputState>,
     active_connection: Option<ConnectionInfo>,
+    is_testing: bool,
 }
 
 impl ConnectionForm {
@@ -76,6 +78,7 @@ impl ConnectionForm {
                 database,
                 port,
                 active_connection: connection,
+                is_testing: false,
             }
         })
     }
@@ -134,14 +137,18 @@ impl ConnectionForm {
     }
 
     fn connect(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(connection) = self.get_connection(cx) {
+        if let Some(connection) = self.get_connection(window, cx) {
             connect(&connection, cx);
             self.clear(window, cx);
             cx.notify();
         }
     }
 
-    fn get_connection(&mut self, cx: &mut Context<Self>) -> Option<ConnectionInfo> {
+    fn get_connection(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<ConnectionInfo> {
         let name = self.name.read(cx).value();
         let hostname = self.hostname.read(cx).value();
         let username = self.username.read(cx).value();
@@ -168,7 +175,13 @@ impl ConnectionForm {
             || database.is_empty()
             || port.is_empty()
         {
-            // TODO: Show validation error
+            window.push_notification(
+                (
+                    NotificationType::Error,
+                    "Not all fields have values. Please try again.",
+                ),
+                cx,
+            );
             return None;
         }
 
@@ -185,12 +198,12 @@ impl ConnectionForm {
         };
 
         if port_num < 1 {
-            // TODO: Show validation error
+            window.push_notification((NotificationType::Error, "Invalid port number."), cx);
             return None;
         }
 
         if port_num > 65_535 {
-            // TODO: Show validation error
+            window.push_notification((NotificationType::Error, "Invalid port number."), cx);
             return None;
         }
 
@@ -219,14 +232,14 @@ impl ConnectionForm {
     }
 
     fn save_connection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(connection) = self.get_connection(cx) {
+        if let Some(connection) = self.get_connection(window, cx) {
             add_connection(connection, cx);
             self.clear(window, cx);
         }
     }
 
-    fn update_connection(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(connection) = self.get_connection(cx) {
+    fn update_connection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(connection) = self.get_connection(window, cx) {
             update_connection(connection, cx);
         }
     }
@@ -235,6 +248,47 @@ impl ConnectionForm {
         if let Some(connection) = self.active_connection.clone() {
             delete_connection(connection, cx);
             self.clear(window, cx);
+        }
+    }
+
+    fn test_connection(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.is_testing {
+            return;
+        }
+
+        if let Some(connection) = self.get_connection(window, cx) {
+            self.is_testing = true;
+            cx.notify();
+
+            let connect_options = connection.to_pg_connect_options();
+            let entity = cx.entity();
+
+            cx.spawn_in(window, async move |_this, cx| {
+                let result = DatabaseManager::test_connection_options(connect_options).await;
+
+                let _ = cx.update(|window, cx| {
+                    match result {
+                        Ok(_) => {
+                            window.push_notification(
+                                (NotificationType::Success, "Connection successful!"),
+                                cx,
+                            );
+                        }
+                        Err(e) => {
+                            let error_msg: SharedString =
+                                format!("Connection failed: {}", e).into();
+                            tracing::error!("{}", error_msg.clone());
+                            window.push_notification((NotificationType::Error, error_msg), cx);
+                        }
+                    }
+
+                    cx.update_entity(&entity, |form, cx| {
+                        form.is_testing = false;
+                        cx.notify();
+                    });
+                });
+            })
+            .detach();
         }
     }
 }
@@ -298,6 +352,14 @@ impl Render for ConnectionForm {
                             h_flex()
                                 .mt_2()
                                 .gap_2()
+                                .child(
+                                    Button::new("test-connection")
+                                        .child("Test Connection")
+                                        .loading(self.is_testing)
+                                        .on_click(cx.listener(|this, _, win, cx| {
+                                            this.test_connection(win, cx)
+                                        })),
+                                )
                                 .when(self.active_connection.clone().is_none(), |d| {
                                     d.child(
                                         Button::new("save-connection")
@@ -327,7 +389,13 @@ impl Render for ConnectionForm {
                                                         });
 
                                                         // Notify delete
-                                                        window.push_notification("Deleted", cx);
+                                                        window.push_notification(
+                                                            (
+                                                                NotificationType::Success,
+                                                                "Deleted",
+                                                            ),
+                                                            cx,
+                                                        );
                                                         true
                                                     })
                                               });

@@ -103,7 +103,7 @@ impl TablesTree {
                         });
                     }
                     Err(e) => {
-                        eprintln!("Failed to load tables: {}", e);
+                        tracing::error!("Failed to load tables: {}", e);
                         this.tree_state.update(cx, |state, cx| {
                             state.set_items(vec![], cx);
                             cx.notify();
@@ -199,6 +199,8 @@ impl TablesTree {
         let item = entry.item();
         let is_selected = selected;
 
+        let name = truncate(item.label.clone().as_str(), 23);
+
         let table_type = if item.id.clone().ends_with("-VIEW") {
             "VIEW"
         } else if item.id.clone().ends_with("-BASE TABLE") {
@@ -261,12 +263,7 @@ impl TablesTree {
                             .gap_2()
                             .text_color(text_color)
                             .child(icon.size_4().text_color(text_color.opacity(0.7)))
-                            .child(
-                                Label::new(item.label.clone())
-                                    .font_medium()
-                                    .text_sm()
-                                    .whitespace_nowrap(),
-                            ),
+                            .child(Label::new(name).font_medium().text_sm().whitespace_nowrap()),
                     )
                     .child(
                         Label::new(table_type)
@@ -329,5 +326,13 @@ impl Render for TablesTree {
                 .border_color(cx.theme().border)
                 .rounded(cx.theme().radius),
             )
+    }
+}
+
+fn truncate(s: &str, max_len: usize) -> String {
+    if s.len() > max_len {
+        format!("{}...", &s[..max_len - 3])
+    } else {
+        s.to_string()
     }
 }

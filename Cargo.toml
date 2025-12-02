@@ -1,6 +1,6 @@
 [package]
 name = "pgui"
-version = "0.1.14"
+version = "0.1.15"
 edition = "2024"
 default-run = "pgui"
 
@@ -30,6 +30,8 @@ smol = "2"
 smolhttp = "1"
 sqlformat = "0.3.5"
 sqlx = { version = "0.8", features = [ "runtime-async-std", "tls-native-tls", "postgres", "sqlite", "rust_decimal" ] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tree-sitter = "0.25.6"
 tree-sitter-sequel = "0.3.8"
 url = "2.5"

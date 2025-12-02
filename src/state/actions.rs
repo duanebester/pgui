@@ -178,7 +178,7 @@ async fn connect_async(mut cic: ConnectionInfo, db_manager: DatabaseManager, cx:
                 .await;
         }
     } else {
-        println!("No Connect :(");
+        tracing::warn!("No Connect :(");
         let _ = cx.update_global::<ConnectionState, _>(|state, _cx| {
             state.active_connection = None;
             state.connection_state = ConnectionStatus::Disconnected;

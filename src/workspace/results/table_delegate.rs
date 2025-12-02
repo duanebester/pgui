@@ -99,7 +99,7 @@ impl TableDelegate for EnhancedResultsTableDelegate {
 
     fn render_tr(&self, row_ix: usize, _: &mut Window, _cx: &mut App) -> gpui::Stateful<gpui::Div> {
         div().id(row_ix).on_click(move |ev: &ClickEvent, _, _| {
-            println!(
+            tracing::debug!(
                 "You have clicked row {} with secondary: {}",
                 row_ix,
                 ev.modifiers().secondary()
@@ -125,15 +125,18 @@ impl TableDelegate for EnhancedResultsTableDelegate {
                     .cursor_pointer()
                     .on_mouse_up(MouseButton::Left, move |_ev, _, _| {
                         // Log all the metadata for this cell
-                        println!("\n=== CELL METADATA ===");
-                        println!("Column Name: {}", cell_clone.column_metadata.name);
-                        println!("Column Type: {}", cell_clone.column_metadata.type_name);
-                        println!("Column Ordinal: {}", cell_clone.column_metadata.ordinal);
-                        println!("Table Name: {:?}", cell_clone.column_metadata.table_name);
-                        println!("Is Nullable: {:?}", cell_clone.column_metadata.is_nullable);
-                        println!("Value: {}", cell_clone.value);
-                        println!("Is NULL: {}", cell_clone.is_null);
-                        println!("====================\n");
+                        tracing::debug!("\n=== CELL METADATA ===");
+                        tracing::debug!("Column Name: {}", cell_clone.column_metadata.name);
+                        tracing::debug!("Column Type: {}", cell_clone.column_metadata.type_name);
+                        tracing::debug!("Column Ordinal: {}", cell_clone.column_metadata.ordinal);
+                        tracing::debug!("Table Name: {:?}", cell_clone.column_metadata.table_name);
+                        tracing::debug!(
+                            "Is Nullable: {:?}",
+                            cell_clone.column_metadata.is_nullable
+                        );
+                        tracing::debug!("Value: {}", cell_clone.value);
+                        tracing::debug!("Is NULL: {}", cell_clone.is_null);
+                        tracing::debug!("====================\n");
                     })
                     .child(if cell.is_null {
                         // Style NULL values differently

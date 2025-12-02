@@ -9,12 +9,33 @@ use assets::*;
 use gpui::{App, AppContext as _, Application, KeyBinding, actions};
 use gpui_component::{ActiveTheme as _, Root, theme};
 use themes::*;
+use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt as _, util::SubscriberInitExt as _};
 use window::*;
 use workspace::*;
 
 actions!(window, [Quit]);
 
+fn init_logging() {
+    // Check for --debug flag or -d
+    let debug = std::env::args().any(|arg| arg == "--debug" || arg == "-d");
+
+    // Also respect RUST_LOG env var for fine-grained control
+    let filter = if debug {
+        EnvFilter::new("debug")
+    } else {
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn"))
+    };
+
+    tracing_subscriber::registry()
+        .with(fmt::layer().with_target(true))
+        .with(filter)
+        .init();
+}
+
 fn main() {
+    init_logging();
+    tracing::info!("Starting PGUI v{}", env!("CARGO_PKG_VERSION"));
+
     // Create app w/ assets
     let application = Application::new().with_assets(Assets);
 

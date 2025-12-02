@@ -134,7 +134,7 @@ impl AppStore {
             .is_ok();
 
         if !has_ssl_mode {
-            println!("Migration: ssl_mode column not found, adding it...");
+            tracing::debug!("Migration: ssl_mode column not found, adding it...");
 
             // Add ssl_mode column with default value
             match sqlx::query(
@@ -144,15 +144,15 @@ impl AppStore {
             .await
             {
                 Ok(_) => {
-                    println!("Migration: Successfully added ssl_mode column");
+                    tracing::debug!("Migration: Successfully added ssl_mode column");
                 }
                 Err(e) => {
                     // If column already exists, SQLite will error - that's okay
-                    println!("Migration: Column may already exist: {}", e);
+                    tracing::warn!("Migration: Column may already exist: {}", e);
                 }
             }
         } else {
-            println!("Migration: ssl_mode column already exists");
+            tracing::debug!("Migration: ssl_mode column already exists");
         }
 
         Ok(())

@@ -30,7 +30,7 @@ impl DatabaseManager {
                 *pool_guard = Some(p);
             }
             Err(e) => {
-                eprintln!("Error Connecting: {}", e)
+                tracing::error!("Error Connecting: {}", e)
             }
         };
 

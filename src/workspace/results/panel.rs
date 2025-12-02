@@ -84,7 +84,7 @@ impl ResultsPanel {
                 .await;
 
                 if let Err(e) = result {
-                    eprintln!("Export failed: {}", e);
+                    tracing::error!("Export failed: {}", e);
                     let _ = cx.update(|window, cx| {
                         window.push_notification(
                             (

@@ -203,13 +203,13 @@ impl AgentPanel {
         let result = self.outgoing_tx.try_send(AgentRequest::Chat(text.clone()));
         match result {
             Ok(_) => {
-                println!("Message sent successfully");
+                tracing::debug!("Message sent successfully");
                 // Add user message to display
                 self.add_message(UiMessage::user(text), cx);
                 self.set_loading(true, cx);
             }
             Err(e) => {
-                println!("Failed to send message: {}", e);
+                tracing::error!("Failed to send message: {}", e);
                 self.add_message(UiMessage::error(format!("Failed to send: {}", e)), cx);
             }
         }

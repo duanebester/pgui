@@ -61,7 +61,7 @@ impl ConnectionManager {
                             }
                         }
                         _ => {
-                            println!("not confirm")
+                            tracing::debug!("not confirm")
                         }
                     };
 

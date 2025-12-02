@@ -118,7 +118,7 @@ impl HistoryPanel {
                         );
                     }
                     Err(e) => {
-                        eprintln!("Failed to load history: {}", e);
+                        tracing::error!("Failed to load history: {}", e);
                         this.history_entries.clear();
                         this.filtered_entries.clear();
                         this.list_state = ListState::new(0, ListAlignment::Top, px(20.));

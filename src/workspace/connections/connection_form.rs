@@ -174,11 +174,11 @@ impl ConnectionForm {
 
         let port_num = match port.parse::<usize>() {
             Ok(num) => {
-                println!("Successfully parsed: {}", num);
+                tracing::debug!("Successfully parsed: {}", num);
                 num // The result of the match expression is the parsed number
             }
             Err(e) => {
-                eprintln!("Failed to parse integer: {}", e);
+                tracing::error!("Failed to parse integer: {}", e);
                 // Return a default value or handle the error in another way
                 0
             }

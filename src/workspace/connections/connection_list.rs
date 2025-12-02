@@ -27,7 +27,7 @@ impl ListDelegate for ConnectionListDelegate {
     ) {
         if let Some(selected) = self.selected_index {
             if let Some(conn) = self.matched_connections.get(selected.row) {
-                println!("Selected connection: {}@{}", conn.username, conn.hostname);
+                tracing::debug!("Selected connection: {}@{}", conn.username, conn.hostname);
             }
         }
     }

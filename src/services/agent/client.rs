@@ -136,9 +136,12 @@ impl Agent {
         let mut agent_clone = self.clone_for_inference();
         let response = smol::unblock(move || agent_clone.run_inference()).await?;
 
-        println!("Usage: {:?}", response.usage);
-        println!("Stop reason: {:?}", response.stop_reason);
-        println!("Model: {}", response.model);
+        tracing::debug!(
+            usage = ?response.usage,
+            stop_reason = response.stop_reason,
+            model = response.model,
+            "Chat step"
+        );
 
         // Add assistant response to conversation
         self.add_assistant_message(response.content.clone());
@@ -151,10 +154,10 @@ impl Agent {
             match block {
                 ContentBlock::Text { text } => {
                     text_response = text.clone();
-                    println!("ContentBlock::Text: {}", text);
+                    tracing::debug!("ContentBlock::Text: {}", text);
                 }
                 ContentBlock::ToolUse { id, name, input } => {
-                    println!("ContentBlock::ToolUse: {}, {}, {}", id, name, input);
+                    tracing::debug!("ContentBlock::ToolUse: {}, {}, {}", id, name, input);
                     tool_calls.push(ToolCallData {
                         id: id.clone(),
                         name: name.clone(),
@@ -162,7 +165,7 @@ impl Agent {
                     });
                 }
                 ContentBlock::ToolResult { .. } => {
-                    println!("ContentBlock::ToolResult: shouldn't happen");
+                    tracing::debug!("ContentBlock::ToolResult: shouldn't happen");
                 }
             }
         }

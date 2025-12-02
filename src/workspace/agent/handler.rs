@@ -62,7 +62,7 @@ pub async fn handle_outgoing(
                 }
                 AgentRequest::SetModel(model) => {
                     // Update the agent's model
-                    println!("Setting agent model to: {}", model);
+                    tracing::debug!("Setting agent model to: {}", model);
                     agent.set_model(model);
                     // Clear conversation when model changes
                     agent.clear_conversation();
@@ -70,7 +70,7 @@ pub async fn handle_outgoing(
             }
         }
     } else {
-        println!("Failed to build agent");
+        tracing::error!("Failed to build agent");
         let _ = incoming_tx.try_send(AgentResponse::Error(
             "Failed to initialize agent".to_string(),
         ));
@@ -148,7 +148,7 @@ pub async fn handle_incoming(
                 }
             }
             Err(e) => {
-                println!("Channel error: {}", e);
+                tracing::error!("Channel error: {}", e);
                 if let Some(view) = this.upgrade() {
                     let _ = cx.update_entity(&view, |this, cx| {
                         // TODO: notify of error

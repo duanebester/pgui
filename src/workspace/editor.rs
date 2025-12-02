@@ -6,8 +6,9 @@ use crate::{
 };
 use gpui::{prelude::FluentBuilder as _, *};
 use gpui_component::{
-    ActiveTheme as _, Disableable as _, Icon, IconName, Sizable as _,
+    ActiveTheme as _, Disableable as _, Icon, Sizable as _,
     button::{Button, ButtonVariants as _},
+    divider::Divider,
     h_flex,
     input::{Input, InputState, TabSize},
     select::{Select, SelectEvent, SelectState},
@@ -39,6 +40,7 @@ impl Editor {
             cx.notify();
         });
     }
+
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let default_language = "sql".to_string();
         let lsp_store = SqlCompletionProvider::new();
@@ -53,7 +55,6 @@ impl Editor {
                     hard_tabs: false,
                 })
                 .placeholder("Enter your SQL query here...");
-            i.set_value("SELECT * FROM products;", window, cx);
             i.lsp.completion_provider = Some(Rc::new(lsp_store.clone()));
             i
         });
@@ -177,7 +178,7 @@ impl Render for Editor {
         let connection_name = self.active_connection.clone().map(|x| x.name.clone());
 
         let disconnect_button = Button::new("disconnect_button")
-            .icon(Icon::empty().path("icons/unplug.svg"))
+            .icon(Icon::empty().path("icons/power.svg"))
             .small()
             .danger()
             .ghost()
@@ -203,7 +204,7 @@ impl Render for Editor {
             } else {
                 "Format"
             })
-            .icon(Icon::empty().path("icons/brush-cleaning.svg"))
+            .icon(Icon::empty().path("icons/align-start-vertical.svg"))
             .small()
             .primary()
             .ghost()
@@ -217,22 +218,17 @@ impl Render for Editor {
             .p_2()
             .when(connection_name.is_some(), |el| {
                 el.child(
-                    h_flex().gap_2().items_center().child(
-                        h_flex()
-                            .gap_2()
-                            .items_center()
-                            .text_color(cx.theme().accent_foreground)
-                            .child(disconnect_button)
-                            .child(connection_name.clone().unwrap())
-                            .child(IconName::ChevronRight)
-                            .child(
-                                Select::new(&self.db_select.clone())
-                                    .small()
-                                    .w(px(160.)) // Set dropdown width
-                                    .menu_width(px(180.)), // Set menu popup width
-                                                           // .appearance(false),
-                            ),
-                    ),
+                    h_flex()
+                        .pl_2()
+                        .gap_0()
+                        .items_center()
+                        .text_color(cx.theme().accent_foreground)
+                        .child(Icon::empty().path("icons/database.svg"))
+                        .child(
+                            Select::new(&self.db_select.clone())
+                                .appearance(false)
+                                .menu_width(px(200.)), // Keep menu width for longer db names
+                        ),
                 )
             })
             .when(connection_name.is_none(), |el| el.child(div()))
@@ -241,7 +237,9 @@ impl Render for Editor {
                     .gap_1()
                     .items_center()
                     .child(format_button)
-                    .child(execute_button),
+                    .child(execute_button)
+                    .child(Divider::vertical())
+                    .child(disconnect_button),
             );
 
         v_flex().size_full().child(toolbar).child(

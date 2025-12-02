@@ -117,14 +117,21 @@ impl Workspace {
         // Set editor to executing state
         self.editor.update(cx, |editor, cx| {
             editor.set_executing(true, cx);
+            cx.notify();
         });
+
+        tracing::debug!("execute_query");
 
         // Get database manager from global state
         let db_manager = cx.global::<ConnectionState>().db_manager.clone();
+        tracing::debug!("execute_query - db_manager");
         let active_connection = cx.global::<ConnectionState>().active_connection.clone();
+        tracing::debug!("execute_query - active_connection");
 
         cx.spawn(async move |this, cx| {
+            tracing::debug!("execute_query spawn - before execute_query_enhanced");
             let result = db_manager.execute_query_enhanced(&query).await;
+            tracing::debug!("execute_query_enhanced result");
             // Extract execution info before moving result
             let (execution_time_ms, rows_affected) = match &result {
                 QueryExecutionResult::Modified(modified) => (

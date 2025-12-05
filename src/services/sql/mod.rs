@@ -7,4 +7,5 @@
 mod analyzer;
 mod completions;
 
+pub use analyzer::{SqlQuery, SqlQueryAnalyzer};
 pub use completions::SqlCompletionProvider;

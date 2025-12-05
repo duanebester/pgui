@@ -1,10 +1,12 @@
 use std::rc::Rc;
 
+use crate::services::sql::{SqlQuery, SqlQueryAnalyzer};
 use crate::{
     services::{ConnectionInfo, SqlCompletionProvider},
     state::{ConnectionState, DatabaseState, EditorState, change_database, disconnect},
 };
 use gpui::{prelude::FluentBuilder as _, *};
+use gpui_component::input;
 use gpui_component::{
     ActiveTheme as _, Disableable as _, Icon, Sizable as _,
     button::{Button, ButtonVariants as _},
@@ -31,6 +33,9 @@ pub struct Editor {
     is_formatting: bool,
     active_connection: Option<ConnectionInfo>,
     db_select: Entity<SelectState<Vec<SharedString>>>,
+    analyzer: SqlQueryAnalyzer,
+    parsed_queries: Vec<SqlQuery>,
+    current_query_index: Option<usize>,
 }
 
 impl Editor {
@@ -110,6 +115,9 @@ impl Editor {
 
                 cx.notify();
             }),
+            cx.subscribe(&input_state, |this, _, _: &input::InputEvent, cx| {
+                this.reparse_queries(cx);
+            }),
         ];
 
         cx.subscribe_in(&db_select, window, Self::on_select_database_event)
@@ -123,7 +131,28 @@ impl Editor {
             active_connection: None,
             db_select,
             _subscriptions,
+            analyzer: SqlQueryAnalyzer::new(),
+            parsed_queries: vec![],
+            current_query_index: None,
         }
+    }
+
+    fn find_query_at_cursor(&self, cursor_offset: usize) -> Option<usize> {
+        self.parsed_queries
+            .iter()
+            .position(|q| cursor_offset >= q.start_byte && cursor_offset <= q.end_byte)
+    }
+
+    fn reparse_queries(&mut self, cx: &mut Context<Self>) {
+        let content = self.input_state.read(cx).value().to_string();
+
+        self.parsed_queries = self.analyzer.detect_queries(&content);
+
+        tracing::debug!(
+            "Query {} of {}",
+            self.current_query_index.map(|i| i + 1).unwrap_or(0),
+            self.parsed_queries.len()
+        );
     }
 
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
@@ -161,9 +190,22 @@ impl Editor {
     }
 
     pub fn execute_query(&mut self, _: &ClickEvent, _window: &mut Window, cx: &mut Context<Self>) {
-        let query = self.input_state.read(cx).value().clone();
+        let cursor = self.input_state.read(cx).cursor();
+        self.current_query_index = self.find_query_at_cursor(cursor);
+
+        let query = if let Some(idx) = self.current_query_index {
+            // Execute just the current query
+            self.parsed_queries[idx].query_text.clone()
+        } else if self.parsed_queries.len() == 1 {
+            // Only one query, run it
+            self.parsed_queries[0].query_text.clone()
+        } else {
+            // Fallback to full editor content
+            self.input_state.read(cx).value().to_string()
+        };
+
         if !query.trim().is_empty() {
-            cx.emit(EditorEvent::ExecuteQuery(query.to_string()));
+            cx.emit(EditorEvent::ExecuteQuery(query));
         }
     }
 

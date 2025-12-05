@@ -138,11 +138,11 @@ impl AgentPanel {
         })
         .detach();
 
-        let list_state = ListState::new(4, ListAlignment::Top, px(20.));
+        let list_state = ListState::new(4, ListAlignment::Bottom, px(200.));
 
         cx.observe(&message_state, |this: &mut AgentPanel, _event, cx| {
             let items = this.message_state.read(cx).messages.clone();
-            this.list_state = ListState::new(items.len(), ListAlignment::Top, px(20.));
+            this.list_state = ListState::new(items.len(), ListAlignment::Bottom, px(200.));
             cx.notify();
         })
         .detach();

@@ -3,8 +3,8 @@ use gpui::{AppContext, AsyncApp, WeakEntity};
 
 use crate::{
     services::agent::{
-        Agent, AgentRequest, AgentResponse, ContentBlock, UiMessage, create_get_schema_tool,
-        create_get_table_columns_tool, create_get_tables_tool,
+        Agent, AgentRequest, AgentResponse, ContentBlock, FileSource, UiMessage,
+        create_get_schema_tool, create_get_table_columns_tool, create_get_tables_tool, upload_file,
     },
     workspace::agent::{panel::AgentPanel, tools::execute_tools},
 };
@@ -28,11 +28,38 @@ pub async fn handle_outgoing(
         ])
         .ok()
     {
+        // Get API key for file uploads
+        let api_key = std::env::var("ANTHROPIC_API_KEY").unwrap_or_default();
+
         while let Ok(request) = outgoing_rx.recv().await {
             match request {
-                AgentRequest::Chat(content) => {
+                AgentRequest::Chat { content, files } => {
                     // Start a new user message
-                    let user_content = vec![ContentBlock::Text { text: content }];
+                    let mut user_content = vec![ContentBlock::Text { text: content }];
+
+                    // Upload files and add to content
+                    for path in files {
+                        match smol::unblock({
+                            let api_key = api_key.clone();
+                            let path = path.clone();
+                            move || upload_file(&api_key, &path)
+                        })
+                        .await
+                        {
+                            Ok(file_id) => {
+                                user_content.push(ContentBlock::Document {
+                                    source: FileSource::File { file_id },
+                                });
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to upload file: {}", e);
+                                let _ = incoming_tx.try_send(AgentResponse::Error(format!(
+                                    "Failed to upload file: {}",
+                                    e
+                                )));
+                            }
+                        }
+                    }
 
                     match agent.chat_step(user_content).await {
                         Ok(response) => {

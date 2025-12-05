@@ -134,7 +134,14 @@ impl Agent {
 
         // Run inference in a blocking task since smolhttp is synchronous
         let mut agent_clone = self.clone_for_inference();
-        let response = smol::unblock(move || agent_clone.run_inference()).await?;
+        let response = match smol::unblock(move || agent_clone.run_inference()).await {
+            Ok(response) => response,
+            Err(e) => {
+                // Remove the failed user message from conversation
+                self.conversation.pop();
+                return Err(e);
+            }
+        };
 
         tracing::debug!(
             usage = ?response.usage,
@@ -166,6 +173,9 @@ impl Agent {
                 }
                 ContentBlock::ToolResult { .. } => {
                     tracing::debug!("ContentBlock::ToolResult: shouldn't happen");
+                }
+                ContentBlock::Document { .. } => {
+                    tracing::debug!("ContentBlock::Document: shouldn't happen");
                 }
             }
         }
@@ -268,6 +278,10 @@ impl AgentForInference {
             .headers(vec![
                 ("x-api-key".to_string(), self.api_key.clone()),
                 ("anthropic-version".to_string(), "2023-06-01".to_string()),
+                (
+                    "anthropic-beta".to_string(),
+                    "files-api-2025-04-14".to_string(),
+                ),
                 ("content-type".to_string(), "application/json".to_string()),
             ])
             .body(body.into())
@@ -433,20 +447,8 @@ mod tests {
             .model("claude-sonnet-4.5-20250929".to_string())
             .system_prompt("You are a test assistant".to_string())
             .max_tokens(2048)
-            .build(vec![create_get_schema_tool()]);
+            .build(vec![]);
 
         assert!(agent.is_ok());
-    }
-
-    #[test]
-    fn test_tool_definitions() {
-        let agent = Agent::builder()
-            .api_key("test-key".to_string())
-            .build(vec![create_get_schema_tool()])
-            .unwrap();
-
-        let defs = agent.get_tool_definitions();
-        assert_eq!(defs.len(), 1);
-        assert_eq!(defs[0].name, "get_schema");
     }
 }

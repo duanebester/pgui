@@ -1,12 +1,18 @@
+use std::{env, path::PathBuf};
+
 use async_channel::{Sender, unbounded};
 use gpui::{
     AnyElement, App, AppContext, ClickEvent, Context, Div, Entity, IntoElement, ListAlignment,
-    ListState, ParentElement, Render, SharedString, Styled as _, Window, div, list, px,
+    ListState, ParentElement, PathPromptOptions, Render, SharedString, Styled as _, Window, div,
+    list, prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
-    ActiveTheme as _, Icon, IndexPath, Sizable as _,
+    ActiveTheme as _, Icon, IndexPath, StyledExt as _,
+    alert::Alert,
     button::{Button, ButtonVariants as _},
+    divider::Divider,
     input::{Input, InputState},
+    label::Label,
     select::{Select, SelectEvent, SelectState},
     text::TextView,
 };
@@ -34,7 +40,9 @@ pub struct AgentPanel {
     model_select: Entity<SelectState<Vec<SharedString>>>,
     outgoing_tx: Sender<AgentRequest>,
     list_state: ListState,
+    attached_files: Vec<PathBuf>,
     is_loading: bool,
+    has_api_key: bool,
 }
 
 impl AgentPanel {
@@ -104,6 +112,8 @@ impl AgentPanel {
     }
 
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let has_api_key = env::var("ANTHROPIC_API_KEY").ok().is_some();
+
         let textarea = cx.new(|cx| {
             InputState::new(window, cx)
                 .auto_grow(1, 5)
@@ -173,7 +183,9 @@ impl AgentPanel {
             model_select,
             outgoing_tx,
             list_state,
+            attached_files: vec![],
             is_loading: false,
+            has_api_key,
         }
     }
 
@@ -193,14 +205,21 @@ impl AgentPanel {
         cx.notify();
     }
 
-    fn on_send_message(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+    fn on_submit(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
         let text = self.textarea.read(cx).text().to_string();
         if text.trim().is_empty() {
             return;
         }
 
-        // Send chat request to agent
-        let result = self.outgoing_tx.try_send(AgentRequest::Chat(text.clone()));
+        // Take attached files (clears them from state)
+        let files = std::mem::take(&mut self.attached_files);
+
+        // Send chat request to agent with files
+        let result = self.outgoing_tx.try_send(AgentRequest::Chat {
+            content: text.clone(),
+            files,
+        });
+
         match result {
             Ok(_) => {
                 tracing::debug!("Message sent successfully");
@@ -221,60 +240,146 @@ impl AgentPanel {
 
         cx.notify();
     }
+
+    fn on_attach_file(&mut self, _: &ClickEvent, _window: &mut Window, cx: &mut Context<Self>) {
+        // Create the path prompt options - allow files, multiple selection
+        let options = PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: true,
+            prompt: Some("Select files to attach".into()),
+        };
+
+        // Get the receiver for the selected paths
+        let paths_receiver = cx.prompt_for_paths(options);
+
+        // Spawn an async task to handle the response
+        cx.spawn(async move |this, cx| {
+            // Wait for the user to select paths or cancel
+            if let Ok(result) = paths_receiver.await {
+                match result {
+                    Ok(Some(paths)) => {
+                        // User selected one or more paths
+                        cx.update(|cx| {
+                            let _ = this.update(cx, |chat, cx| {
+                                for path in &paths {
+                                    tracing::debug!("Attached file: {:?}", path);
+                                }
+                                chat.attached_files.extend(paths);
+                                cx.notify();
+                            });
+                        })
+                        .ok();
+                    }
+                    Ok(None) => {
+                        // User cancelled the dialog
+                        tracing::debug!("File selection cancelled");
+                    }
+                    Err(e) => {
+                        tracing::error!("Error selecting files: {}", e);
+                    }
+                }
+            }
+        })
+        .detach();
+    }
+
+    fn attachment_label(&mut self) -> String {
+        match self.attached_files.clone().len() {
+            0 => "Attach file".to_string(),
+            1 => "1 file".to_string(),
+            n => format!("{} files", n),
+        }
+    }
 }
 
 impl Render for AgentPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .size_full()
+        let form_header = div()
             .flex()
-            .flex_col()
+            .gap_1()
+            .p_2()
+            .justify_start()
+            .items_center()
             .child(
-                div().p_2().size_full().flex().child(
-                    list(
-                        self.list_state.clone(),
-                        cx.processor(|this, ix, window, cx| this.render_entry(ix, window, cx)),
-                    )
-                    .size_full(),
-                ),
+                Button::new("add-file")
+                    .icon(Icon::empty().path("icons/paperclip.svg"))
+                    .ghost()
+                    .mr_1()
+                    .on_click(cx.listener(Self::on_attach_file)),
             )
+            .child(Divider::vertical())
+            .child(Label::new(self.attachment_label()).pl_2());
+
+        let form_footer = div()
+            .flex()
+            .gap_2()
+            .p_2()
+            .justify_between()
+            .items_center()
             .child(
                 div()
-                    .p_2()
-                    .border_t_1()
-                    .border_color(cx.theme().input)
                     .flex()
-                    .flex_col()
-                    .child(
-                        div()
-                            .w_full()
-                            .pt_2()
-                            .child(Input::new(&self.textarea).h(px(120.0)).appearance(false)),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .child(
-                                div()
-                                    .flex()
-                                    .text_sm()
-                                    .pl_2()
-                                    .items_center()
-                                    .child(Icon::empty().path("icons/anthropic.svg"))
-                                    .child(Select::new(&self.model_select).appearance(false)),
-                            )
-                            .child(
-                                Button::new("btn-send")
-                                    .tooltip("send")
-                                    .ghost()
-                                    .small()
-                                    .loading(self.is_loading)
-                                    .icon(Icon::empty().path("icons/send.svg"))
-                                    .on_click(cx.listener(Self::on_send_message)),
-                            ),
-                    ),
+                    .justify_start()
+                    .gap_1()
+                    .pl_2()
+                    .items_center()
+                    .child(Icon::empty().path("icons/anthropic.svg"))
+                    .child(Select::new(&self.model_select).appearance(false)),
             )
+            .child(
+                Button::new("send")
+                    .rounded_full()
+                    .bg(cx.theme().accent)
+                    .loading(self.is_loading.clone())
+                    .icon(Icon::empty().path("icons/move-up.svg"))
+                    .on_click(cx.listener(Self::on_submit)),
+            );
+
+        let form = div()
+            .flex()
+            .flex_col()
+            .justify_between()
+            .rounded_2xl()
+            .border_1()
+            .border_color(cx.theme().border.opacity(0.8))
+            .bg(cx.theme().popover)
+            .min_h(px(160.))
+            .shadow_lg()
+            .w_full()
+            .child(
+                div().flex().flex_col().child(form_header).child(
+                    Input::new(&self.textarea.clone())
+                        .appearance(false)
+                        .disabled(!self.has_api_key.clone()),
+                ),
+            )
+            .child(form_footer);
+
+        div().v_flex().size_full().child(
+            div()
+                .p_2()
+                .v_flex()
+                .size_full()
+                .child(
+                    div().p_2().size_full().flex().child(
+                        list(
+                            self.list_state.clone(),
+                            cx.processor(|this, ix, window, cx| this.render_entry(ix, window, cx)),
+                        )
+                        .size_full(),
+                    ),
+                )
+                .when(!self.has_api_key.clone(), |d| {
+                    d.child(
+                        Alert::error(
+                            "no-api-key",
+                            "Please set `ANTHROPIC_API_KEY` in environment",
+                        )
+                        .title("No Anthropic API Key"),
+                    )
+                })
+                .when(self.has_api_key.clone(), |d| d.child(form)),
+        )
     }
 }

@@ -44,6 +44,16 @@ pub enum ContentBlock {
         #[serde(skip_serializing_if = "Option::is_none")]
         is_error: Option<bool>,
     },
+    #[serde(rename = "document")]
+    Document { source: FileSource },
+}
+
+/// File source for referencing uploaded files
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum FileSource {
+    #[serde(rename = "file")]
+    File { file_id: String },
 }
 
 /// Tool definition for the LLM API

@@ -4,7 +4,7 @@ A high performance GUI to query & manage postgres databases.
 
 Written in [GPUI](https://gpui.rs) with [GPUI Component](https://github.com/longbridge/gpui-component)
 
-![Screenshot](./assets/screenshots/pgui.png)
+<img src="https://github.com/duanebester/pgui/blob/main/assets/screenshots/pgui-dual.png" height="400px" />
 
 ### Connections
 

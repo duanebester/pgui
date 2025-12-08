@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g., 0.1.20)"
+        required: true
+        type: string
 
 env:
   CARGO_TERM_COLOR: always
@@ -26,13 +32,15 @@ jobs:
 
       - name: Create DMG
         run: |
-          # Install create-dmg
           brew install create-dmg
 
-          # Get version from tag (strips 'v' prefix)
-          VERSION=${GITHUB_REF_NAME#v}
+          # Get version from tag or manual input
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION=${GITHUB_REF_NAME#v}
+          fi
 
-          # Create DMG
           create-dmg \
             --volname "PGUI $VERSION" \
             --volicon "PGUI.app/Contents/Resources/AppIcon.icns" \
@@ -64,7 +72,17 @@ jobs:
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
+        # Only create release on tag push, not manual runs
+        if: startsWith(github.ref, 'refs/tags/')
         with:
           files: artifacts/**/*.dmg
           generate_release_notes: true
           draft: false
+
+      - name: Upload artifacts summary (manual run)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          echo "## 📦 Build Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "DMG files built successfully! Download from the Artifacts section above." >> $GITHUB_STEP_SUMMARY
+          ls -la artifacts/

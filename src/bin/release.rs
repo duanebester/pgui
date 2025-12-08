@@ -149,7 +149,7 @@ fn do_release(version: &str) -> Result<()> {
 
     // Git operations
     println!("📌 Creating git commit...");
-    run_command("git", &["add", "Cargo.toml", "Cargo.lock"])?;
+    run_command("git", &["add", "Cargo.toml"])?;
     run_command("git", &["commit", "-m", &format!("Release v{}", version)])?;
 
     println!("🏷️  Creating git tag v{}...", version);

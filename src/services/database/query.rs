@@ -1,7 +1,9 @@
+use futures::StreamExt;
+use futures::stream::BoxStream;
 use sqlx::postgres::types::Oid;
 use sqlx::postgres::{PgColumn, PgRow};
 use sqlx::query::Query;
-use sqlx::{Column, PgPool, Row, TypeInfo, ValueRef};
+use sqlx::{Column, Execute as _, PgPool, Row, TypeInfo, ValueRef};
 use std::collections::{HashMap, HashSet};
 
 use crate::services::database::types::{ErrorResult, ModifiedResult};
@@ -40,11 +42,6 @@ impl DatabaseManager {
         }
     }
 
-    async fn execute_select_query(&self, sql: &str, pool: &PgPool) -> QueryExecutionResult {
-        let q = sqlx::query(sql);
-        self.execute_base_query(q, pool).await
-    }
-
     async fn execute_modification_query(&self, sql: &str, pool: &PgPool) -> QueryExecutionResult {
         let start_time = std::time::Instant::now();
         match sqlx::query(sql).execute(pool).await {
@@ -65,18 +62,21 @@ impl DatabaseManager {
         }
     }
 
-    pub(crate) async fn execute_base_query(
+    pub(crate) async fn execute_internal_query(
         &self,
         query: Query<'_, sqlx::Postgres, sqlx::postgres::PgArguments>,
         pool: &PgPool,
     ) -> QueryExecutionResult {
         let start_time = std::time::Instant::now();
+        let original_query = query.sql().to_string();
+
         match query.fetch_all(pool).await {
             Ok(rows) => {
                 let execution_time = start_time.elapsed().as_millis();
 
                 if rows.is_empty() {
                     return QueryExecutionResult::Select(QueryResult {
+                        original_query,
                         columns: vec![],
                         rows: vec![],
                         row_count: 0,
@@ -89,6 +89,7 @@ impl DatabaseManager {
                 let result_rows = convert_rows(&rows, &metadata);
 
                 QueryExecutionResult::Select(QueryResult {
+                    original_query,
                     columns,
                     rows: result_rows,
                     row_count: rows.len(),
@@ -103,6 +104,75 @@ impl DatabaseManager {
                 })
             }
         }
+    }
+
+    pub(crate) async fn execute_select_query(
+        &self,
+        sql: &str,
+        pool: &PgPool,
+    ) -> QueryExecutionResult {
+        let start_time = std::time::Instant::now();
+        let original_query = sql.to_string();
+
+        let limited_sql = if !sql.to_lowercase().contains(" limit ") {
+            format!("{} LIMIT {}", sql.trim_end_matches(';'), 1_000)
+        } else {
+            sql.to_string()
+        };
+
+        match sqlx::query(limited_sql.as_ref()).fetch_all(pool).await {
+            Ok(rows) => {
+                let execution_time = start_time.elapsed().as_millis();
+
+                if rows.is_empty() {
+                    return QueryExecutionResult::Select(QueryResult {
+                        original_query,
+                        columns: vec![],
+                        rows: vec![],
+                        row_count: 0,
+                        execution_time_ms: execution_time,
+                    });
+                }
+
+                let metadata = fetch_table_metadata(&rows, pool).await;
+                let columns = build_column_metadata(&rows[0], &metadata);
+                let result_rows = convert_rows(&rows, &metadata);
+
+                QueryExecutionResult::Select(QueryResult {
+                    original_query,
+                    columns,
+                    rows: result_rows,
+                    row_count: rows.len(),
+                    execution_time_ms: execution_time,
+                })
+            }
+            Err(e) => {
+                let execution_time_ms = start_time.elapsed().as_millis();
+                QueryExecutionResult::Error(ErrorResult {
+                    message: format!("Query failed: {}", e),
+                    execution_time_ms,
+                })
+            }
+        }
+    }
+
+    /// Returns a stream of rows for large dataset exports
+    /// Caller is responsible for processing rows as they arrive
+    #[allow(dead_code)]
+    pub async fn stream_query<'a>(
+        &'a self,
+        sql: &'a str,
+    ) -> Result<BoxStream<'a, Result<PgRow, sqlx::Error>>, String> {
+        let pool_guard = self.pool.read().await;
+
+        let pool = match pool_guard.as_ref() {
+            Some(pool) => pool.clone(),
+            None => return Err("Database not connected".to_string()),
+        };
+
+        // fetch() instead of fetch_all() - returns a Stream
+        let stream = sqlx::query(sql).fetch(&pool);
+        Ok(stream.boxed())
     }
 }
 

@@ -1,5 +1,10 @@
 use crate::{
-    services::{QueryExecutionResult, export_to_csv, export_to_json},
+    services::{
+        QueryExecutionResult,
+        export::{stream_to_csv, stream_to_ndjson},
+        export_to_csv, export_to_json,
+    },
+    state::ConnectionState,
     workspace::results::EnhancedResultsTableDelegate,
 };
 use gpui::*;
@@ -49,6 +54,70 @@ impl ResultsPanel {
         cx.notify();
     }
 
+    fn stream_export_results(
+        &mut self,
+        format: ExportFormat,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(QueryExecutionResult::Select(result)) = &self.current_result else {
+            return;
+        };
+
+        let sql = result.original_query.clone();
+        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+        let suggested_name = match format {
+            ExportFormat::Csv => format!("export_{}.csv", timestamp),
+            ExportFormat::Json => format!("export_{}.ndjson", timestamp),
+        };
+
+        let home = dirs::home_dir().unwrap_or_default();
+        let receiver = cx.prompt_for_new_path(&home, Some(&suggested_name));
+
+        cx.spawn_in(window, async move |_this, cx| {
+            if let Ok(Ok(Some(path))) = receiver.await {
+                let db_manager_result =
+                    cx.read_global::<ConnectionState, _>(|state, _, _| state.db_manager.clone());
+
+                let result: anyhow::Result<u64> = if let Ok(db_manager) = db_manager_result {
+                    cx.background_executor()
+                        .spawn(async move {
+                            let stream = db_manager
+                                .stream_query(&sql)
+                                .await
+                                .map_err(|e| anyhow::anyhow!(e))?;
+
+                            match format {
+                                ExportFormat::Csv => stream_to_csv(stream, &path).await,
+                                ExportFormat::Json => stream_to_ndjson(stream, &path).await,
+                            }
+                        })
+                        .await
+                } else {
+                    Ok(0)
+                };
+
+                match result {
+                    Ok(count) => {
+                        let _ = cx.update(|window, cx| {
+                            let info: SharedString = format!("Exported {} rows", count).into();
+                            window.push_notification((NotificationType::Info, info), cx);
+                        });
+                    }
+                    Err(e) => {
+                        tracing::error!("Stream export failed: {}", e);
+                        let _ = cx.update(|window, cx| {
+                            window
+                                .push_notification((NotificationType::Error, "Export failed"), cx);
+                        });
+                    }
+                }
+            }
+        })
+        .detach();
+    }
+
+    #[allow(dead_code)]
     fn export_results(
         &mut self,
         format: ExportFormat,
@@ -119,7 +188,7 @@ impl ResultsPanel {
                     .ghost()
                     .tooltip("Export CSV")
                     .on_click(cx.listener(|this, _, win, cx| {
-                        this.export_results(ExportFormat::Csv, win, cx);
+                        this.stream_export_results(ExportFormat::Csv, win, cx);
                     })),
             )
             .child(
@@ -129,7 +198,7 @@ impl ResultsPanel {
                     .ghost()
                     .tooltip("Export JSON")
                     .on_click(cx.listener(|this, _, win, cx| {
-                        this.export_results(ExportFormat::Json, win, cx);
+                        this.stream_export_results(ExportFormat::Json, win, cx);
                     })),
             )
     }

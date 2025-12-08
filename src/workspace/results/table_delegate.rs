@@ -63,7 +63,12 @@ impl TableDelegate for EnhancedResultsTableDelegate {
         self.columns.get(col_ix).unwrap()
     }
 
-    fn render_th(&self, col_ix: usize, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render_th(
+        &mut self,
+        col_ix: usize,
+        _: &mut Window,
+        cx: &mut Context<TableState<Self>>,
+    ) -> impl IntoElement {
         let col = self.column(col_ix, cx);
         div().child(format!("{}", col.clone().name))
         // let col_meta = if !self.rows.is_empty() && col_ix < self.rows[0].len() {
@@ -97,7 +102,12 @@ impl TableDelegate for EnhancedResultsTableDelegate {
         // th
     }
 
-    fn render_tr(&self, row_ix: usize, _: &mut Window, _cx: &mut App) -> gpui::Stateful<gpui::Div> {
+    fn render_tr(
+        &mut self,
+        row_ix: usize,
+        _: &mut Window,
+        _cx: &mut Context<TableState<Self>>,
+    ) -> gpui::Stateful<gpui::Div> {
         div().id(row_ix).on_click(move |ev: &ClickEvent, _, _| {
             tracing::debug!(
                 "You have clicked row {} with secondary: {}",
@@ -108,11 +118,11 @@ impl TableDelegate for EnhancedResultsTableDelegate {
     }
 
     fn render_td(
-        &self,
+        &mut self,
         row_ix: usize,
         col_ix: usize,
         _: &mut Window,
-        cx: &mut App,
+        cx: &mut Context<TableState<Self>>,
     ) -> impl IntoElement {
         // println!("render_td called: row={}, col={}", row_ix, col_ix);
         // Don't clone all rows - access directly instead

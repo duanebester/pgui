@@ -1,5 +1,5 @@
 use anyhow::Result;
-use sqlx::Row;
+use sqlx::{Postgres, Row};
 
 use super::manager::DatabaseManager;
 use super::types::{
@@ -74,7 +74,7 @@ impl DatabaseManager {
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("Database not connected"))?;
 
-        let query = r#"
+        let query_str = r#"
             SELECT
                 column_name,
                 data_type,
@@ -86,8 +86,11 @@ impl DatabaseManager {
             ORDER BY ordinal_position
         "#;
 
-        let query = sqlx::query(query).bind(table_name).bind(table_schema);
-        let result = self.execute_base_query(query, pool).await;
+        let query = sqlx::query::<Postgres>(query_str)
+            .bind(table_name)
+            .bind(table_schema);
+
+        let result = self.execute_internal_query(query, pool).await;
         Ok(result)
     }
 

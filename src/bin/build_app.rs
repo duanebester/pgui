@@ -223,7 +223,8 @@ fn ensure_rsvg_convert_available() -> Result<()> {
         .context("Failed to check for rsvg-convert")?;
 
     if !output.status.success() {
-        println!("Installing librsvg (required for SVG to PNG conversion)...");
+        println!("⚠️  rsvg-convert not found (required for SVG to PNG conversion)");
+        println!();
 
         // Check if brew is available
         let brew_check = Command::new("which")
@@ -233,20 +234,43 @@ fn ensure_rsvg_convert_available() -> Result<()> {
 
         if !brew_check.status.success() {
             return Err(anyhow!(
-                "❌ Error: brew not found. Please install librsvg manually:\n  brew install librsvg"
+                "❌ librsvg is required but not installed.\n\n\
+                Please install it manually:\n  \
+                brew install librsvg\n\n\
+                If you don't have Homebrew, install it first from https://brew.sh"
             ));
         }
 
-        // Install librsvg using brew
-        let install_output = Command::new("brew")
-            .args(&["install", "librsvg"])
-            .output()
-            .context("Failed to install librsvg")?;
+        // Prompt the user
+        println!("Would you like to install librsvg via Homebrew? [y/N] ");
 
-        if !install_output.status.success() {
+        let mut input = String::new();
+        std::io::stdin()
+            .read_line(&mut input)
+            .context("Failed to read user input")?;
+
+        let input = input.trim().to_lowercase();
+        if input == "y" || input == "yes" {
+            println!("Installing librsvg...");
+
+            let install_output = Command::new("brew")
+                .args(&["install", "librsvg"])
+                .output()
+                .context("Failed to install librsvg")?;
+
+            if !install_output.status.success() {
+                return Err(anyhow!(
+                    "Failed to install librsvg: {}",
+                    String::from_utf8_lossy(&install_output.stderr)
+                ));
+            }
+
+            println!("✅ librsvg installed successfully!");
+        } else {
             return Err(anyhow!(
-                "Failed to install librsvg: {}",
-                String::from_utf8_lossy(&install_output.stderr)
+                "❌ librsvg is required to build the app icon.\n\n\
+                Please install it manually and try again:\n  \
+                brew install librsvg"
             ));
         }
     }

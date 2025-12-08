@@ -42,7 +42,12 @@ impl ListDelegate for ConnectionListDelegate {
         cx.notify();
     }
 
-    fn render_item(&self, ix: IndexPath, _: &mut Window, _cx: &mut App) -> Option<Self::Item> {
+    fn render_item(
+        &mut self,
+        ix: IndexPath,
+        _: &mut Window,
+        _cx: &mut Context<ListState<Self>>,
+    ) -> Option<Self::Item> {
         let selected = Some(ix) == self.selected_index;
         if let Some(conn) = self.matched_connections.get(ix.row) {
             return Some(ConnectionListItem::new(ix, conn.clone(), ix, selected));

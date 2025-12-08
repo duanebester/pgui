@@ -9,6 +9,7 @@ use crate::services::AppStore;
 use crate::services::{ErrorResult, QueryExecutionResult, TableInfo};
 use crate::state::{ConnectionState, ConnectionStatus};
 use crate::workspace::agent::AgentPanel;
+use crate::workspace::agent::AgentPanelEvent;
 use crate::workspace::history::HistoryEvent;
 use crate::workspace::history::HistoryPanel;
 use crate::workspace::results::ResultsPanel;
@@ -81,6 +82,17 @@ impl Workspace {
                 |this, _, event: &HistoryEvent, win, cx| match event {
                     HistoryEvent::LoadQuery(sql) => {
                         this.load_query_into_editor(sql.clone(), win, cx);
+                    }
+                },
+            ),
+            cx.subscribe_in(
+                &agent_panel,
+                window,
+                |this, _, event: &AgentPanelEvent, window, cx| match event {
+                    AgentPanelEvent::RunQuery(sql) => {
+                        // Load into editor and execute
+                        this.load_query_into_editor(sql.clone().to_string(), window, cx);
+                        this.execute_query(sql.clone().to_string(), cx);
                     }
                 },
             ),

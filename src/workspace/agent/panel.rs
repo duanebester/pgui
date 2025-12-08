@@ -2,15 +2,17 @@ use std::{env, path::PathBuf};
 
 use async_channel::{Sender, unbounded};
 use gpui::{
-    AnyElement, App, AppContext, ClickEvent, Context, Div, Entity, IntoElement, ListAlignment,
-    ListState, ParentElement, PathPromptOptions, Render, SharedString, Styled as _, Window, div,
-    list, prelude::FluentBuilder as _, px,
+    AnyElement, App, AppContext, ClickEvent, Context, Div, Entity, EventEmitter, IntoElement,
+    ListAlignment, ListState, ParentElement, PathPromptOptions, Render, SharedString, Styled as _,
+    Window, div, list, prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
-    ActiveTheme as _, Icon, IndexPath, StyledExt as _,
+    ActiveTheme as _, Icon, IndexPath, Sizable as _, StyledExt as _,
     alert::Alert,
     button::{Button, ButtonVariants as _},
+    clipboard::Clipboard,
     divider::Divider,
+    h_flex,
     input::{Input, InputState},
     label::Label,
     select::{Select, SelectEvent, SelectState},
@@ -21,6 +23,14 @@ use crate::{
     services::agent::{AgentRequest, AgentResponse, MessageRole, UiMessage},
     workspace::agent::handler::{handle_incoming, handle_outgoing},
 };
+
+/// Events emitted by the AgentPanel
+pub enum AgentPanelEvent {
+    /// Load query into editor and execute it
+    RunQuery(SharedString),
+}
+
+impl EventEmitter<AgentPanelEvent> for AgentPanel {}
 
 /// Available LLM models
 pub const AVAILABLE_MODELS: &[(&str, &str)] = &[
@@ -66,10 +76,32 @@ impl AgentPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Div {
+        let entity = cx.entity();
         let id: SharedString = format!("chat-{}", ix).into();
-        div()
-            .p_2()
-            .child(TextView::markdown(id, item.content, window, cx).selectable(true))
+        div().p_2().child(
+            TextView::markdown(id.clone(), item.clone().content, window, cx)
+                .selectable(true)
+                .code_block_actions(move |code_block, _window, _cx| {
+                    let code = code_block.code();
+                    let entity_clone = entity.clone();
+
+                    h_flex()
+                        .gap_1()
+                        .child(Clipboard::new(code.clone()).value(code.clone()))
+                        .child(
+                            Button::new(code.clone())
+                                .icon(Icon::empty().path("icons/play.svg"))
+                                .tooltip("Load & Run Query")
+                                .ghost()
+                                .xsmall()
+                                .on_click(move |_, _, cx| {
+                                    cx.update_entity(&entity_clone.clone(), |_ent, cx| {
+                                        cx.emit(AgentPanelEvent::RunQuery(code.clone()));
+                                    })
+                                }),
+                        )
+                }),
+        )
     }
 
     fn render_user(
@@ -344,7 +376,7 @@ impl Render for AgentPanel {
             .border_1()
             .border_color(cx.theme().border.opacity(0.8))
             .bg(cx.theme().popover)
-            .min_h(px(160.))
+            .h(px(220.))
             .shadow_lg()
             .w_full()
             .child(

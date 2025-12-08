@@ -107,6 +107,7 @@ pub struct QueryResult {
     pub rows: Vec<ResultRow>,
     pub row_count: usize,
     pub execution_time_ms: u128,
+    pub original_query: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

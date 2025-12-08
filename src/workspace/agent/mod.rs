@@ -2,4 +2,4 @@ mod handler;
 mod panel;
 mod tools;
 
-pub use panel::AgentPanel;
+pub use panel::{AgentPanel, AgentPanelEvent};

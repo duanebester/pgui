@@ -1,21 +1,30 @@
 use anyhow::{Context, Result, anyhow};
-use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::{env, fs};
 
 const APP_NAME: &str = "PGUI";
 const BUNDLE_ID: &str = "com.duanebester.pgui";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const EXECUTABLE_NAME: &str = "pgui";
+const PRE_GENERATED_ICNS: &str = "assets/icons/AppIcon.icns";
 const SVG_FILE: &str = "assets/icons/db-spark.svg";
 
+fn project_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+}
+
 fn main() -> Result<()> {
-    println!("🚀 Building complete Mac app for PGUI...");
+    // Change to project root so all paths are consistent
+    let root = project_root();
+    env::set_current_dir(&root).context(format!("Failed to change to project root: {:?}", root))?;
+
+    println!("🚀 Building complete Mac app for PGUI v{}...", VERSION);
 
     build_release_executable()?;
     create_app_bundle_structure()?;
     create_info_plist()?;
-    create_app_icon()?;
+    setup_app_icon()?;
 
     println!("✅ Mac app created successfully!");
     println!("📱 App location: {}.app", APP_NAME);
@@ -23,13 +32,6 @@ fn main() -> Result<()> {
     println!("🎯 Next steps:");
     println!("   1. Double-click {}.app to run your app", APP_NAME);
     println!("   2. Drag {}.app to /Applications to install it", APP_NAME);
-    println!("   3. Update the bundle ID if needed: {}", BUNDLE_ID);
-    println!();
-    println!("🔧 Optional: To sign the app for distribution:");
-    println!(
-        "   codesign --deep --force --verify --verbose --sign 'Developer ID Application: Your Name' {}.app",
-        APP_NAME
-    );
 
     Ok(())
 }
@@ -37,16 +39,20 @@ fn main() -> Result<()> {
 fn build_release_executable() -> Result<()> {
     println!("📦 Building release executable...");
 
-    let output = Command::new("cargo")
-        .args(&["build", "--release"])
-        .output()
+    // Use status() instead of output() to stream the build output
+    let status = Command::new("cargo")
+        .args(["build", "--release"])
+        .status() // This streams output to terminal
         .context("Failed to execute cargo build")?;
 
-    if !output.status.success() {
-        return Err(anyhow!(
-            "Cargo build failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        ));
+    if !status.success() {
+        return Err(anyhow!("Cargo build failed"));
+    }
+
+    // Verify the executable exists
+    let exe_path = format!("target/release/{}", EXECUTABLE_NAME);
+    if !Path::new(&exe_path).exists() {
+        return Err(anyhow!("Release executable not found at {}", exe_path));
     }
 
     Ok(())
@@ -76,7 +82,7 @@ fn create_app_bundle_structure() -> Result<()> {
 
     // Make executable
     let output = Command::new("chmod")
-        .args(&["+x", &target_executable])
+        .args(["+x", &target_executable])
         .output()
         .context("Failed to make executable")?;
 
@@ -117,7 +123,7 @@ fn create_info_plist() -> Result<()> {
     <key>CFBundleVersion</key>
     <string>{}</string>
     <key>LSMinimumSystemVersion</key>
-    <string>10.15</string>
+    <string>11.0</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSHumanReadableCopyright</key>
@@ -138,10 +144,22 @@ fn create_info_plist() -> Result<()> {
     Ok(())
 }
 
-fn create_app_icon() -> Result<()> {
-    println!("🎨 Creating app icon...");
+fn setup_app_icon() -> Result<()> {
+    let icns_dest = format!("{}.app/Contents/Resources/AppIcon.icns", APP_NAME);
 
-    // Check if rsvg-convert is available
+    // Check if pre-generated .icns exists (preferred for CI)
+    if Path::new(PRE_GENERATED_ICNS).exists() {
+        println!("🎨 Using pre-generated app icon...");
+        fs::copy(PRE_GENERATED_ICNS, &icns_dest).context("Failed to copy pre-generated icon")?;
+        return Ok(());
+    }
+
+    // Fall back to generating from SVG (for local dev)
+    println!("🎨 Generating app icon from SVG (no pre-generated icon found)...");
+    create_app_icon_from_svg(&icns_dest)
+}
+
+fn create_app_icon_from_svg(icns_dest: &str) -> Result<()> {
     ensure_rsvg_convert_available()?;
 
     let iconset_dir = format!("{}.iconset", APP_NAME);
@@ -169,11 +187,9 @@ fn create_app_icon() -> Result<()> {
     ];
 
     for (filename, size) in icon_sizes {
-        println!("Generating {} ({}x{})...", filename, size, size);
-
         let output_path = format!("{}/{}", iconset_dir, filename);
         let output = Command::new("rsvg-convert")
-            .args(&[
+            .args([
                 "-w",
                 &size.to_string(),
                 "-h",
@@ -195,10 +211,8 @@ fn create_app_icon() -> Result<()> {
     }
 
     // Convert to icns file
-    println!("Converting to .icns format...");
-    let icns_path = format!("{}.app/Contents/Resources/AppIcon.icns", APP_NAME);
     let output = Command::new("iconutil")
-        .args(&["-c", "icns", &iconset_dir, "-o", &icns_path])
+        .args(["-c", "icns", &iconset_dir, "-o", icns_dest])
         .output()
         .context("Failed to run iconutil")?;
 
@@ -216,63 +230,16 @@ fn create_app_icon() -> Result<()> {
 }
 
 fn ensure_rsvg_convert_available() -> Result<()> {
-    // Check if rsvg-convert is available
     let output = Command::new("which")
         .arg("rsvg-convert")
         .output()
         .context("Failed to check for rsvg-convert")?;
 
     if !output.status.success() {
-        println!("⚠️  rsvg-convert not found (required for SVG to PNG conversion)");
-        println!();
-
-        // Check if brew is available
-        let brew_check = Command::new("which")
-            .arg("brew")
-            .output()
-            .context("Failed to check for brew")?;
-
-        if !brew_check.status.success() {
-            return Err(anyhow!(
-                "❌ librsvg is required but not installed.\n\n\
-                Please install it manually:\n  \
-                brew install librsvg\n\n\
-                If you don't have Homebrew, install it first from https://brew.sh"
-            ));
-        }
-
-        // Prompt the user
-        println!("Would you like to install librsvg via Homebrew? [y/N] ");
-
-        let mut input = String::new();
-        std::io::stdin()
-            .read_line(&mut input)
-            .context("Failed to read user input")?;
-
-        let input = input.trim().to_lowercase();
-        if input == "y" || input == "yes" {
-            println!("Installing librsvg...");
-
-            let install_output = Command::new("brew")
-                .args(&["install", "librsvg"])
-                .output()
-                .context("Failed to install librsvg")?;
-
-            if !install_output.status.success() {
-                return Err(anyhow!(
-                    "Failed to install librsvg: {}",
-                    String::from_utf8_lossy(&install_output.stderr)
-                ));
-            }
-
-            println!("✅ librsvg installed successfully!");
-        } else {
-            return Err(anyhow!(
-                "❌ librsvg is required to build the app icon.\n\n\
-                Please install it manually and try again:\n  \
-                brew install librsvg"
-            ));
-        }
+        return Err(anyhow!(
+            "rsvg-convert not found. Install with: brew install librsvg\n\
+             Or commit a pre-generated assets/icons/AppIcon.icns file."
+        ));
     }
 
     Ok(())

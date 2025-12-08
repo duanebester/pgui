@@ -8,6 +8,10 @@ default-run = "pgui"
 name = "build-app"
 path = "src/bin/build_app.rs"
 
+[[bin]]
+name = "release"
+path = "src/bin/release.rs"
+
 [dependencies]
 anyhow = "1.0"
 async-channel = "2.5"

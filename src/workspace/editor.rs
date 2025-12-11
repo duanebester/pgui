@@ -48,7 +48,7 @@ impl Editor {
 
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let default_language = "sql".to_string();
-        let lsp_store = SqlCompletionProvider::new();
+        let lsp_store = SqlCompletionProvider::new(cx);
 
         let input_state = cx.new(|cx| {
             let mut i = InputState::new(window, cx)

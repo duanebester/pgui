@@ -42,6 +42,45 @@ pub enum AgentResponse {
     Error(String),
 }
 
+// ============================================================================
+// Inline Completion Types
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum InlineAgentRequest {
+    Chat { content: String },
+    InlineCompletion(InlineCompletionRequest),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum InlineAgentResponse {
+    InlineCompletion(InlineCompletionResponse),
+    /// Agent encountered an error
+    Error(String),
+}
+
+/// Request for inline completion from the agent
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InlineCompletionRequest {
+    /// Unique request ID for cancellation support
+    pub request_id: u64,
+    /// Current line content before cursor
+    pub prefix: String,
+    /// Current line content after cursor (if any)
+    pub suffix: String,
+    /// Optional surrounding context (e.g., previous lines, schema info)
+    pub context: Option<String>,
+}
+
+/// Response for inline completion from the agent
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InlineCompletionResponse {
+    /// The request ID this response corresponds to
+    pub request_id: u64,
+    /// The suggested completion text (None if no suggestion)
+    pub suggestion: Option<String>,
+}
+
 impl AgentResponse {
     /// Check if this response indicates the agent is done processing
     pub fn is_done(&self) -> bool {

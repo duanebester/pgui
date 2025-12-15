@@ -141,6 +141,12 @@ async fn connect_async(mut cic: ConnectionInfo, db_manager: DatabaseManager, cx:
             });
         }
 
+        if let Ok(schema) = db_manager.get_schema(None).await {
+            let _ = cx.update_global::<EditorState, _>(|state, _cx| {
+                state.schema = Some(schema);
+            });
+        }
+
         if let Ok(databases) = db_manager.get_databases().await {
             let _ = cx.update_global::<DatabaseState, _>(|state, _cx| {
                 state.databases = databases;

@@ -42,6 +42,19 @@ pub enum AgentResponse {
     Error(String),
 }
 
+/// Request for inline completion from the agent
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InlineCompletionRequest {
+    /// Unique request ID for cancellation support
+    pub request_id: u64,
+    /// Current line content before cursor
+    pub prefix: String,
+    /// Current line content after cursor (if any)
+    pub suffix: String,
+    /// Optional surrounding context (e.g., previous lines, schema info)
+    pub context: Option<String>,
+}
+
 impl AgentResponse {
     /// Check if this response indicates the agent is done processing
     pub fn is_done(&self) -> bool {

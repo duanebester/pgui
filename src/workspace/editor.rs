@@ -1,12 +1,14 @@
 use std::rc::Rc;
 
-use crate::services::sql::{SqlQuery, SqlQueryAnalyzer};
+use crate::services::sql::{SqlCodeActionProvider, SqlQuery, SqlQueryAnalyzer};
+use crate::state::{EditorCodeActions, EditorInlineCompletions};
+use crate::workspace::agent::format_schema_for_llm;
 use crate::{
     services::{ConnectionInfo, SqlCompletionProvider},
     state::{ConnectionState, DatabaseState, EditorState, change_database, disconnect},
 };
 use gpui::{prelude::FluentBuilder as _, *};
-use gpui_component::input;
+use gpui_component::spinner::Spinner;
 use gpui_component::{
     ActiveTheme as _, Disableable as _, Icon, Sizable as _,
     button::{Button, ButtonVariants as _},
@@ -16,6 +18,7 @@ use gpui_component::{
     select::{Select, SelectEvent, SelectState},
     v_flex,
 };
+use gpui_component::{Selectable as _, input};
 use lsp_types::CompletionItem;
 use sqlformat::{FormatOptions, QueryParams, format};
 
@@ -28,7 +31,8 @@ impl EventEmitter<EditorEvent> for Editor {}
 pub struct Editor {
     input_state: Entity<InputState>,
     _subscriptions: Vec<Subscription>,
-    lsp_store: SqlCompletionProvider,
+    completion_provider: Rc<SqlCompletionProvider>,
+    code_action_provider: Rc<SqlCodeActionProvider>,
     is_executing: bool,
     is_formatting: bool,
     active_connection: Option<ConnectionInfo>,
@@ -36,6 +40,9 @@ pub struct Editor {
     analyzer: SqlQueryAnalyzer,
     parsed_queries: Vec<SqlQuery>,
     current_query_index: Option<usize>,
+    inline_completions_enabled: bool,
+    code_actions_loading: bool,
+    inline_completions_loading: bool,
 }
 
 impl Editor {
@@ -48,7 +55,8 @@ impl Editor {
 
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let default_language = "sql".to_string();
-        let lsp_store = SqlCompletionProvider::new();
+        let completion_provider = Rc::new(SqlCompletionProvider::new());
+        let code_action_provider = Rc::new(SqlCodeActionProvider::new());
 
         let input_state = cx.new(|cx| {
             let mut i = InputState::new(window, cx)
@@ -60,7 +68,8 @@ impl Editor {
                     hard_tabs: false,
                 })
                 .placeholder("Enter your SQL query here...");
-            i.lsp.completion_provider = Some(Rc::new(lsp_store.clone()));
+            i.lsp.completion_provider = Some(completion_provider.clone());
+            i.lsp.code_action_providers = vec![code_action_provider.clone()];
             i
         });
 
@@ -69,13 +78,14 @@ impl Editor {
         let _subscriptions = vec![
             cx.observe_global::<EditorState>(move |this, cx| {
                 let tables = cx.global::<EditorState>().tables.clone();
+                let schema = cx.global::<EditorState>().schema.clone();
                 let completions = tables
                     .iter()
                     .map(|table| {
                         let table = table.clone();
                         CompletionItem {
                             label: table.table_name.into(),
-                            kind: Some(lsp_types::CompletionItemKind::KEYWORD),
+                            kind: Some(lsp_types::CompletionItemKind::CLASS), // Better kind for tables
                             detail: Some(
                                 format!("{}:{}", table.table_schema, table.table_type).into(),
                             ),
@@ -83,7 +93,12 @@ impl Editor {
                         }
                     })
                     .collect::<Vec<_>>();
-                this.lsp_store.add_schema_completions(completions);
+                this.completion_provider.add_schema_completions(completions);
+                if let Some(schema) = schema {
+                    let formatted = format_schema_for_llm(&schema);
+                    this.completion_provider.add_schema(formatted.clone());
+                    this.code_action_provider.set_schema(formatted);
+                }
                 cx.notify();
             }),
             cx.observe_global_in::<ConnectionState>(window, move |this, win, cx| {
@@ -118,6 +133,14 @@ impl Editor {
             cx.subscribe(&input_state, |this, _, _: &input::InputEvent, cx| {
                 this.reparse_queries(cx);
             }),
+            cx.observe_global::<EditorCodeActions>(move |this, cx| {
+                this.code_actions_loading = cx.global::<EditorCodeActions>().loading.clone();
+                cx.notify();
+            }),
+            cx.observe_global::<EditorInlineCompletions>(move |this, cx| {
+                this.code_actions_loading = cx.global::<EditorInlineCompletions>().loading.clone();
+                cx.notify();
+            }),
         ];
 
         cx.subscribe_in(&db_select, window, Self::on_select_database_event)
@@ -125,7 +148,8 @@ impl Editor {
 
         Self {
             input_state,
-            lsp_store,
+            completion_provider,
+            code_action_provider,
             is_executing: false,
             is_formatting: false,
             active_connection: None,
@@ -134,6 +158,9 @@ impl Editor {
             analyzer: SqlQueryAnalyzer::new(),
             parsed_queries: vec![],
             current_query_index: None,
+            inline_completions_enabled: false,
+            code_actions_loading: false,
+            inline_completions_loading: false,
         }
     }
 
@@ -173,6 +200,19 @@ impl Editor {
                 }
             }
         }
+    }
+
+    pub fn toggle_inline_completions(
+        &mut self,
+        _: &ClickEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let new_value = !self.inline_completions_enabled;
+        self.completion_provider
+            .toggle_inline_completions(new_value);
+        self.inline_completions_enabled = new_value;
+        cx.notify()
     }
 
     pub fn format_query(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -219,6 +259,9 @@ impl Render for Editor {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let connection_name = self.active_connection.clone().map(|x| x.name.clone());
 
+        let show_ai_loading =
+            self.code_actions_loading.clone() || self.inline_completions_loading.clone();
+
         let disconnect_button = Button::new("disconnect_button")
             .icon(Icon::empty().path("icons/power.svg"))
             .small()
@@ -253,6 +296,16 @@ impl Render for Editor {
             .disabled(self.is_formatting)
             .on_click(cx.listener(Self::format_query));
 
+        let inline_completions_button = Button::new("inline-completions")
+            .tooltip("Toggle inline assist")
+            .icon(Icon::empty().path("icons/sparkles.svg"))
+            .small()
+            .primary()
+            .ghost()
+            .selected(self.inline_completions_enabled.clone())
+            .disabled(self.is_formatting || self.is_executing)
+            .on_click(cx.listener(Self::toggle_inline_completions));
+
         let toolbar = h_flex()
             .id("editor-toolbar")
             .justify_between()
@@ -278,6 +331,7 @@ impl Render for Editor {
                 h_flex()
                     .gap_1()
                     .items_center()
+                    .child(inline_completions_button)
                     .child(format_button)
                     .child(execute_button)
                     .child(Divider::vertical())
@@ -294,7 +348,10 @@ impl Render for Editor {
                 .pb_2()
                 .font_family("Monaco")
                 .text_size(px(12.))
-                .child(Input::new(&self.input_state).h_full()),
+                .child(Input::new(&self.input_state).h_full()) // Absolutely positioned loading indicator in top-right
+                .when(show_ai_loading, |d| {
+                    d.child(div().absolute().top_2().right_4().child(Spinner::new()))
+                }),
         )
     }
 }

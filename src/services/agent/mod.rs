@@ -24,8 +24,8 @@ pub use files::upload_file;
 // Re-export message types
 #[allow(unused_imports)]
 pub use messages::{
-    AgentRequest, AgentResponse, MessageMetadata, MessageRole, ToolCallData, ToolResultData,
-    UiMessage,
+    AgentRequest, AgentResponse, InlineCompletionRequest, MessageMetadata, MessageRole,
+    ToolCallData, ToolResultData, UiMessage,
 };
 
 // Re-export core types

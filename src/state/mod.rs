@@ -18,7 +18,7 @@ mod editor;
 // Re-export state structs
 pub use connection::{ConnectionState, ConnectionStatus};
 pub use database::DatabaseState;
-pub use editor::EditorState;
+pub use editor::{EditorCodeActions, EditorInlineCompletions, EditorState};
 
 // Re-export actions for orchestration
 pub use actions::{
@@ -32,4 +32,6 @@ pub fn init(cx: &mut App) {
     ConnectionState::init(cx);
     DatabaseState::init(cx);
     EditorState::init(cx);
+    EditorCodeActions::init(cx);
+    EditorInlineCompletions::init(cx);
 }

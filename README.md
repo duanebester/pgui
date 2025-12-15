@@ -16,4 +16,12 @@ Passwords are saved in the host OS secure store via Keyring crate.
 
 Only Anthropic support w/ `ANTHROPIC_API_KEY` via enviroment.
 
+### AI Completions (Cmd+.)
+
+AI Completions are triggered via code actions (cmd + .) or via the inline completions toggle.
+
+> Note: currently hard-coded to claude haiku 4.5
+
+### Building
+
 See [Mac App Build](./MAC_APP_BUILD.md) for building locally on MacOS

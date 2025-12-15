@@ -42,23 +42,6 @@ pub enum AgentResponse {
     Error(String),
 }
 
-// ============================================================================
-// Inline Completion Types
-// ============================================================================
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum InlineAgentRequest {
-    Chat { content: String },
-    InlineCompletion(InlineCompletionRequest),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum InlineAgentResponse {
-    InlineCompletion(InlineCompletionResponse),
-    /// Agent encountered an error
-    Error(String),
-}
-
 /// Request for inline completion from the agent
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InlineCompletionRequest {
@@ -70,15 +53,6 @@ pub struct InlineCompletionRequest {
     pub suffix: String,
     /// Optional surrounding context (e.g., previous lines, schema info)
     pub context: Option<String>,
-}
-
-/// Response for inline completion from the agent
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InlineCompletionResponse {
-    /// The request ID this response corresponds to
-    pub request_id: u64,
-    /// The suggested completion text (None if no suggestion)
-    pub suggestion: Option<String>,
 }
 
 impl AgentResponse {

@@ -1,9 +1,11 @@
-use std::sync::{
-    Arc, RwLock,
-    atomic::{AtomicU64, Ordering},
+use std::{
+    sync::{
+        Arc, RwLock,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+    },
+    time::Duration,
 };
 
-use async_channel::{Receiver, Sender, unbounded};
 use gpui::*;
 use gpui_component::input::{CompletionProvider, InputState, Rope, RopeExt};
 use lsp_types::{
@@ -12,61 +14,59 @@ use lsp_types::{
     InsertTextFormat,
 };
 
-use crate::services::{TableInfo, sql::handle_completion_requests};
-use crate::{
-    services::agent::{InlineAgentRequest, InlineAgentResponse, InlineCompletionRequest},
-    state::EditorState,
+use crate::services::{
+    agent::Agent,
+    sql::completion_agent::{build_completion_agent, build_completion_prompt, get_completion},
 };
+use crate::{services::agent::InlineCompletionRequest, state::EditorInlineCompletions};
+
+/// Default debounce duration for inline completions.
+const DEFAULT_INLINE_COMPLETION_DEBOUNCE: Duration = Duration::from_millis(600);
 
 /// SQL completion provider that implements LSP-style completions
 /// with optional agent-powered inline completions
 #[derive(Clone)]
 pub struct SqlCompletionProvider {
     completions: Arc<RwLock<Vec<CompletionItem>>>,
-    tables: Arc<RwLock<Vec<TableInfo>>>,
-    completion_request_tx: Sender<InlineAgentRequest>,
-    completion_response_rx: Receiver<InlineAgentResponse>,
+    agent: Option<Agent>,
+    schema: Arc<RwLock<Option<String>>>,
     /// Counter for generating unique request IDs
     request_counter: Arc<AtomicU64>,
     /// Track the latest request ID to ignore stale responses
     latest_request_id: Arc<AtomicU64>,
+    inline_completions_enabled: Arc<AtomicBool>,
 }
 
 impl SqlCompletionProvider {
-    pub fn new(cx: &mut App) -> Self {
-        let tables = cx.global::<EditorState>().tables.clone();
-
+    pub fn new() -> Self {
         let completions =
             serde_json::from_slice::<Vec<CompletionItem>>(include_bytes!("./completions.json"))
                 .unwrap();
 
-        // Create channels for agent communication
-        let (request_tx, request_rx) = unbounded::<InlineAgentRequest>();
-        let (response_tx, response_rx) = unbounded::<InlineAgentResponse>();
+        let agent = build_completion_agent();
 
         Self {
+            agent,
+            schema: Arc::new(RwLock::new(None)),
             completions: Arc::new(RwLock::new(completions)),
-            tables: Arc::new(RwLock::new(vec![])),
-            completion_request_tx: request_tx,
-            completion_response_rx: response_rx,
             request_counter: Arc::new(AtomicU64::new(0)),
             latest_request_id: Arc::new(AtomicU64::new(0)),
+            inline_completions_enabled: Arc::new(AtomicBool::new(false)),
         }
-    }
-
-    fn get_inline_completions(&self) -> () {
-        // Spawn the completion agent handler
-        // Note: This runs on a background thread pool
-        smol::spawn(handle_completion_requests(
-            self.get_tables(),
-            self.completion_request_tx,
-            self.completion_response_tx,
-        ))
-        .detach();
     }
 
     fn get_completions(&self) -> Vec<CompletionItem> {
         let guard = self.completions.read().unwrap();
+        guard.clone()
+    }
+
+    pub fn toggle_inline_completions(&self, enabled: bool) {
+        self.inline_completions_enabled
+            .store(enabled, Ordering::SeqCst);
+    }
+
+    fn get_inline_completions_enabled(&self) -> bool {
+        let guard = self.inline_completions_enabled.load(Ordering::SeqCst);
         guard.clone()
     }
 
@@ -76,15 +76,14 @@ impl SqlCompletionProvider {
         guard.extend(completions);
     }
 
-    fn get_tables(&self) -> Vec<TableInfo> {
-        let guard = self.tables.read().unwrap();
-        guard.clone()
+    pub fn add_schema(&self, schema: String) {
+        let mut guard = self.schema.write().unwrap();
+        *guard = Some(schema);
     }
 
-    /// Add tables
-    pub fn add_tables(&self, tables: Vec<TableInfo>) {
-        let mut guard = self.tables.write().unwrap();
-        guard.extend(tables);
+    fn get_schema(&self) -> Option<String> {
+        let guard = self.schema.read().unwrap();
+        guard.clone()
     }
 
     /// Generate a new unique request ID
@@ -121,15 +120,33 @@ impl CompletionProvider for SqlCompletionProvider {
             return Task::ready(Ok(CompletionResponse::Array(vec![])));
         }
 
-        let rope = rope.clone();
-        let items = self.get_completions();
-
-        cx.background_spawn(async move {
-            if trigger_character.starts_with("/") {
+        // Slash commands can trigger anywhere
+        if trigger_character.starts_with("/") {
+            let rope = rope.clone();
+            return cx.background_spawn(async move {
                 let items = build_slash_completions(&rope, offset, &trigger_character);
-                return Ok(CompletionResponse::Array(items));
-            }
+                Ok(CompletionResponse::Array(items))
+            });
+        }
 
+        // For regular completions, only trigger at word boundaries
+        // offset points to after the trigger character, so we check offset - 2
+        // to see what character was before the trigger
+        if offset > trigger_character.len() {
+            let prev_char_offset = offset - trigger_character.len() - 1;
+            let prev_char = rope
+                .slice(prev_char_offset..prev_char_offset + 1)
+                .to_string();
+            if let Some(ch) = prev_char.chars().next() {
+                // If previous char is alphanumeric or underscore, we're mid-word - skip
+                if ch.is_ascii_alphanumeric() || ch == '_' {
+                    return Task::ready(Ok(CompletionResponse::Array(vec![])));
+                }
+            }
+        }
+
+        let items = self.get_completions();
+        cx.background_spawn(async move {
             let items = items
                 .iter()
                 .filter(|item| item.label.starts_with(&trigger_character))
@@ -145,6 +162,11 @@ impl CompletionProvider for SqlCompletionProvider {
         })
     }
 
+    #[inline]
+    fn inline_completion_debounce(&self) -> Duration {
+        DEFAULT_INLINE_COMPLETION_DEBOUNCE
+    }
+
     fn inline_completion(
         &self,
         rope: &Rope,
@@ -153,85 +175,78 @@ impl CompletionProvider for SqlCompletionProvider {
         _window: &mut Window,
         cx: &mut Context<InputState>,
     ) -> Task<Result<InlineCompletionResponse>> {
-        println!("inline_completion");
+        if !self.get_inline_completions_enabled() {
+            return Task::ready(Ok(InlineCompletionResponse::Array(vec![])));
+        }
+        if self.agent.is_none() {
+            return Task::ready(Ok(InlineCompletionResponse::Array(vec![])));
+        }
+
+        cx.update_global::<EditorInlineCompletions, _>(|eic, _cx| {
+            eic.loading = true;
+        });
+
         let rope = rope.clone();
         let request_id = self.next_request_id();
-        let request_tx = self.completion_request_tx.clone();
-        let response_rx = self.completion_response_rx.clone();
-        let latest_request_id = self.latest_request_id.clone();
+        let _latest_request_id = self.latest_request_id.clone();
 
-        cx.background_spawn(async move {
-            let point = rope.offset_to_point(offset);
-            let line_start = rope.line_start_offset(point.row);
-            let line_end = rope.line_end_offset(point.row);
+        let mut agent = self.agent.clone().unwrap();
+        let schema = self.get_schema().clone();
 
-            let prefix = rope.slice(line_start..offset).to_string();
-            let suffix = rope.slice(offset..line_end).to_string();
+        let task = cx.spawn(async move |_this, cx| {
+            let res = cx
+                .background_spawn(async move {
+                    let point = rope.offset_to_point(offset);
+                    let line_start = rope.line_start_offset(point.row);
+                    let line_end = rope.line_end_offset(point.row);
+                    let _current_line = rope.slice(line_start..offset).to_string();
 
-            // Include up to 10 previous lines as context
-            let context = (point.row > 0).then(|| {
-                let ctx_start = rope.line_start_offset(point.row.saturating_sub(10));
-                rope.slice(ctx_start..line_start).to_string()
+                    let prefix = rope.slice(line_start..offset).to_string();
+                    let suffix = rope.slice(offset..line_end).to_string();
+
+                    // Include up to 10 previous lines as context
+                    let context = (point.row > 0).then(|| {
+                        let ctx_start = rope.line_start_offset(point.row.saturating_sub(10));
+                        rope.slice(ctx_start..line_start).to_string()
+                    });
+
+                    let request = InlineCompletionRequest {
+                        request_id,
+                        prefix: prefix,
+                        suffix: suffix,
+                        context: context,
+                    };
+                    let prompt = build_completion_prompt(&request, &schema);
+                    let suggestion = get_completion(&mut agent, prompt).await;
+
+                    Ok(suggestion
+                        .map(suggestion_response)
+                        .unwrap_or_else(empty_response))
+                })
+                .await;
+
+            let _ = cx.update_global::<EditorInlineCompletions, _>(|eic, _cx| {
+                eic.loading = false;
             });
 
-            // Send request
-            let request = InlineCompletionRequest {
-                request_id,
-                prefix: prefix,
-                suffix: suffix,
-                context: context,
-            };
+            res
+        });
 
-            if request_tx
-                .send(InlineAgentRequest::InlineCompletion(request))
-                .await
-                .is_err()
-            {
-                println!("error sending");
-                return Ok(empty_response());
-            }
-
-            let suggestion = await_response(request_id, &response_rx, &latest_request_id).await;
-            Ok(suggestion
-                .map(suggestion_response)
-                .unwrap_or_else(empty_response))
-        })
+        task
     }
 
     fn is_completion_trigger(
         &self,
         _offset: usize,
-        _new_text: &str,
+        new_text: &str,
         _cx: &mut Context<InputState>,
     ) -> bool {
-        true
-    }
-}
+        let Some(ch) = new_text.chars().next() else {
+            return false;
+        };
 
-/// Wait for a matching response from the agent, with timeout and staleness checking
-async fn await_response(
-    request_id: u64,
-    response_rx: &Receiver<InlineAgentResponse>,
-    latest_request_id: &AtomicU64,
-) -> Option<String> {
-    loop {
-        let response = response_rx.recv().await.ok();
-        println!("await_response request_id: {:?}", request_id);
-        println!("await_response response: {:?}", response);
-        match response {
-            Some(InlineAgentResponse::InlineCompletion(resp)) if resp.request_id == request_id => {
-                if latest_request_id.load(Ordering::SeqCst) != request_id {
-                    return None;
-                }
-                return resp.suggestion;
-            }
-            Some(InlineAgentResponse::Error(e)) => {
-                tracing::debug!("Completion error: {}", e);
-                return None;
-            }
-            Some(_) => continue,
-            None => return None,
-        }
+        // Only trigger for word-starting characters or slash commands
+        ch.is_ascii_alphabetic() || ch == '_' || ch == '/'
     }
 }
 

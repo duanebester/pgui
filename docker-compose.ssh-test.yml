@@ -15,6 +15,12 @@ services:
       - "2222:22"
     networks:
       - ssh-test-net
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "22"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
     entrypoint: /bin/bash
     command: >
       -c "sed -i 's/AllowTcpForwarding no/AllowTcpForwarding yes/' /etc/ssh/sshd_config &&

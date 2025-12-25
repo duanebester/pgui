@@ -5,26 +5,26 @@
 //! - Leverages user's existing SSH config (~/.ssh/config)
 //! - Uses system's ssh-agent automatically
 //! - Works with ProxyJump/bastion hosts
-//! - Uses ControlMaster on Unix for connection multiplexing
 
+use super::askpass::AskpassProxy;
 use super::types::{SshAuthMethod, SshTunnelConfig};
 use anyhow::{Context, Result};
 use futures::StreamExt;
 use smol::io::{AsyncBufReadExt, BufReader};
 use smol::net::TcpListener;
 use smol::process::{Child, Command, Stdio};
+use std::sync::Arc;
 use std::time::Duration;
-
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
 
 /// An active SSH tunnel using the system ssh binary with -L port forwarding.
 pub struct SshTunnel {
     config: SshTunnelConfig,
     local_port: u16,
     process: Child,
+    /// Holds the askpass proxy alive while the tunnel is running.
+    /// Uses Arc so we can share with the password-serving task.
     #[cfg(unix)]
-    _temp_dir: tempfile::TempDir,
+    _askpass_proxy: Option<Arc<AskpassProxy>>,
 }
 
 #[allow(dead_code)]
@@ -40,16 +40,6 @@ impl SshTunnel {
             config.local_bind_port
         };
 
-        // Create temp directory for control socket and askpass script
-        #[cfg(unix)]
-        let temp_dir = tempfile::Builder::new()
-            .prefix("pgui-ssh-")
-            .tempdir()
-            .context("Failed to create temp directory")?;
-
-        #[cfg(unix)]
-        let socket_path = temp_dir.path().join("ssh.sock");
-
         // Build the port forwarding spec: local_port:remote_host:remote_port
         let forward_spec = format!(
             "{}:{}:{}:{}",
@@ -62,6 +52,7 @@ impl SshTunnel {
         cmd.kill_on_drop(true);
 
         // Don't need stdin for the tunnel, capture stdout/stderr for debugging
+        // Using Stdio::null() for stdin means SSH has no TTY, which helps askpass work
         cmd.stdin(Stdio::null());
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
@@ -76,46 +67,84 @@ impl SshTunnel {
         cmd.args(["-o", "ExitOnForwardFailure=yes"]);
 
         // Disable strict host key checking for testing (user can override via extra_args)
-        // In production, you might want to be more careful here
         cmd.args(["-o", "StrictHostKeyChecking=accept-new"]);
 
         // Connection keep-alive settings
         cmd.args(["-o", "ServerAliveInterval=15"]);
         cmd.args(["-o", "ServerAliveCountMax=3"]);
 
-        #[cfg(unix)]
-        {
-            // Use ControlMaster for connection reuse (Unix only)
-            cmd.args(["-o", "ControlMaster=auto"]);
-            cmd.args(["-o", "ControlPersist=60"]);
-            cmd.arg("-o")
-                .arg(format!("ControlPath={}", socket_path.display()));
-        }
+        // Explicitly disable ControlMaster to prevent SSH from backgrounding
+        cmd.args(["-o", "ControlMaster=no"]);
 
         // Set port if non-default
         if config.ssh_port != 22 {
             cmd.arg("-p").arg(config.ssh_port.to_string());
         }
 
-        // Handle authentication
+        // Handle authentication - set up askpass proxy if needed
+        #[cfg(unix)]
+        let askpass_proxy: Option<Arc<AskpassProxy>>;
+
         match &config.auth_method {
             SshAuthMethod::Agent => {
                 // Default behavior - ssh will use ssh-agent automatically
+                #[cfg(unix)]
+                {
+                    askpass_proxy = None;
+                }
             }
             SshAuthMethod::Password(password) => {
-                // Set up askpass for password authentication
                 #[cfg(unix)]
-                Self::setup_askpass(&mut cmd, &temp_dir, password)?;
+                {
+                    let proxy = Arc::new(
+                        AskpassProxy::new()
+                            .await
+                            .context("Failed to create askpass proxy")?,
+                    );
+                    Self::configure_askpass_env(&mut cmd, &proxy);
+
+                    // Spawn background task to serve the password.
+                    // The proxy is kept alive by the Arc in the tunnel struct.
+                    let proxy_clone = Arc::clone(&proxy);
+                    let password = password.clone();
+                    smol::spawn(async move {
+                        // Serve password multiple times in case SSH re-prompts
+                        // (e.g., for 2FA or retry on typo)
+                        for attempt in 0..3 {
+                            match proxy_clone
+                                .serve_password_with_timeout(&password, Duration::from_secs(60))
+                                .await
+                            {
+                                Ok(true) => {
+                                    tracing::debug!(
+                                        "Served password via askpass (attempt {})",
+                                        attempt + 1
+                                    );
+                                }
+                                Ok(false) => {
+                                    // Timeout - SSH probably authenticated already
+                                    tracing::debug!(
+                                        "Askpass timeout (attempt {}), SSH may be authenticated",
+                                        attempt + 1
+                                    );
+                                    break;
+                                }
+                                Err(e) => {
+                                    tracing::warn!("Askpass proxy error: {}", e);
+                                    break;
+                                }
+                            }
+                        }
+                    })
+                    .detach();
+
+                    // Store the proxy to keep it alive for the tunnel's lifetime
+                    askpass_proxy = Some(proxy);
+                }
 
                 #[cfg(not(unix))]
                 {
-                    // On Windows, we'll rely on the user having configured their SSH
-                    // or we could use plink with password, but that's more complex
-                    tracing::warn!(
-                        "Password authentication via askpass not supported on Windows, \
-                        falling back to default SSH auth"
-                    );
-                    let _ = password; // Suppress unused warning
+                    tracing::warn!("Password authentication via askpass not supported on Windows");
                 }
             }
             SshAuthMethod::PublicKey {
@@ -124,9 +153,50 @@ impl SshTunnel {
             } => {
                 cmd.arg("-i").arg(private_key_path);
                 // If there's a passphrase, set up askpass
-                if let Some(pass) = passphrase {
-                    #[cfg(unix)]
-                    Self::setup_askpass(&mut cmd, &temp_dir, pass)?;
+                #[cfg(unix)]
+                {
+                    if let Some(pass) = passphrase {
+                        let proxy = Arc::new(
+                            AskpassProxy::new()
+                                .await
+                                .context("Failed to create askpass proxy for key passphrase")?,
+                        );
+                        Self::configure_askpass_env(&mut cmd, &proxy);
+
+                        let proxy_clone = Arc::clone(&proxy);
+                        let pass = pass.clone();
+                        smol::spawn(async move {
+                            for attempt in 0..3 {
+                                match proxy_clone
+                                    .serve_password_with_timeout(&pass, Duration::from_secs(60))
+                                    .await
+                                {
+                                    Ok(true) => {
+                                        tracing::debug!(
+                                            "Served key passphrase via askpass (attempt {})",
+                                            attempt + 1
+                                        );
+                                    }
+                                    Ok(false) => {
+                                        tracing::debug!(
+                                            "Askpass timeout for key (attempt {})",
+                                            attempt + 1
+                                        );
+                                        break;
+                                    }
+                                    Err(e) => {
+                                        tracing::warn!("Askpass proxy error for key: {}", e);
+                                        break;
+                                    }
+                                }
+                            }
+                        })
+                        .detach();
+
+                        askpass_proxy = Some(proxy);
+                    } else {
+                        askpass_proxy = None;
+                    }
                 }
             }
         }
@@ -184,8 +254,8 @@ impl SshTunnel {
             .detach();
         }
 
-        // Wait briefly for the tunnel to establish
-        smol::Timer::after(Duration::from_millis(500)).await;
+        // Wait for the tunnel to establish - give it more time
+        smol::Timer::after(Duration::from_millis(1000)).await;
 
         // Check if process is still running
         if let Ok(Some(status)) = process.try_status() {
@@ -200,7 +270,7 @@ impl SshTunnel {
 
         // Try to verify the local port is actually listening
         let verify_addr = format!("{}:{}", config.local_bind_host, local_port);
-        let mut retries = 5;
+        let mut retries = 10;
         while retries > 0 {
             match smol::net::TcpStream::connect(&verify_addr).await {
                 Ok(_) => {
@@ -233,34 +303,19 @@ impl SshTunnel {
             local_port,
             process,
             #[cfg(unix)]
-            _temp_dir: temp_dir,
+            _askpass_proxy: askpass_proxy,
         })
     }
 
-    /// Set up SSH_ASKPASS for password/passphrase authentication (Unix only)
+    /// Configure SSH environment variables to use askpass proxy
     #[cfg(unix)]
-    fn setup_askpass(cmd: &mut Command, temp_dir: &tempfile::TempDir, secret: &str) -> Result<()> {
-        // Create a simple askpass script that echoes the password
-        // This is similar to Zed's approach but simplified
-        let askpass_path = temp_dir.path().join("askpass.sh");
-
-        // Write the script - it just echoes the password
-        // In a more sophisticated setup, this could communicate via Unix socket
-        let script = format!("#!/bin/sh\necho '{}'\n", secret.replace('\'', "'\"'\"'"));
-        std::fs::write(&askpass_path, script).context("Failed to write askpass script")?;
-
-        // Make it executable
-        let mut perms = std::fs::metadata(&askpass_path)?.permissions();
-        perms.set_mode(0o700);
-        std::fs::set_permissions(&askpass_path, perms)?;
-
-        // Set environment variables for SSH to use our askpass
-        cmd.env("SSH_ASKPASS", &askpass_path);
+    fn configure_askpass_env(cmd: &mut Command, proxy: &AskpassProxy) {
+        cmd.env("SSH_ASKPASS", proxy.script_path());
+        // SSH_ASKPASS_REQUIRE=force makes SSH use askpass even without a terminal
         cmd.env("SSH_ASKPASS_REQUIRE", "force");
-        // Need to detach from terminal for askpass to work
-        cmd.env("DISPLAY", ":0");
-
-        Ok(())
+        // Use existing DISPLAY or fallback - SSH needs some value for askpass to work
+        let display = std::env::var("DISPLAY").unwrap_or_else(|_| ":0".to_string());
+        cmd.env("DISPLAY", display);
     }
 
     /// Find an available port to bind to
@@ -317,21 +372,12 @@ impl SshTunnel {
     /// Test SSH connection without starting a full tunnel.
     /// This verifies we can connect and authenticate to the SSH server.
     pub async fn test_ssh_connection(config: &SshTunnelConfig) -> Result<()> {
-        // Create temp directory for askpass if needed
-        #[cfg(unix)]
-        let temp_dir = tempfile::Builder::new()
-            .prefix("pgui-ssh-test-")
-            .tempdir()
-            .context("Failed to create temp directory")?;
-
         let mut cmd = Command::new("ssh");
 
         cmd.stdin(Stdio::null());
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
 
-        // Just try to run 'true' or 'exit 0' to test connection
-        cmd.args(["-o", "BatchMode=yes"]); // Don't prompt for password in test
         cmd.args(["-o", "ConnectTimeout=10"]);
         cmd.args(["-o", "StrictHostKeyChecking=accept-new"]);
 
@@ -339,24 +385,75 @@ impl SshTunnel {
             cmd.arg("-p").arg(config.ssh_port.to_string());
         }
 
-        // Handle authentication for test
+        // Handle authentication
+        #[cfg(unix)]
+        let _proxy_handle: Option<Arc<AskpassProxy>>;
+
         match &config.auth_method {
-            SshAuthMethod::Agent => {}
+            SshAuthMethod::Agent => {
+                cmd.args(["-o", "BatchMode=yes"]);
+                #[cfg(unix)]
+                {
+                    _proxy_handle = None;
+                }
+            }
             SshAuthMethod::Password(password) => {
                 #[cfg(unix)]
-                Self::setup_askpass(&mut cmd, &temp_dir, password)?;
-                // Remove BatchMode for password auth
-                cmd.args(["-o", "BatchMode=no"]);
+                {
+                    let proxy = Arc::new(
+                        AskpassProxy::new()
+                            .await
+                            .context("Failed to create askpass proxy for test")?,
+                    );
+                    Self::configure_askpass_env(&mut cmd, &proxy);
+
+                    let proxy_clone = Arc::clone(&proxy);
+                    let password = password.clone();
+                    smol::spawn(async move {
+                        let _ = proxy_clone
+                            .serve_password_with_timeout(&password, Duration::from_secs(30))
+                            .await;
+                    })
+                    .detach();
+
+                    _proxy_handle = Some(proxy);
+                }
+
+                #[cfg(not(unix))]
+                {
+                    tracing::warn!("Password authentication via askpass not supported on Windows");
+                    let _ = password;
+                }
             }
             SshAuthMethod::PublicKey {
                 private_key_path,
                 passphrase,
             } => {
                 cmd.arg("-i").arg(private_key_path);
-                if let Some(pass) = passphrase {
-                    #[cfg(unix)]
-                    Self::setup_askpass(&mut cmd, &temp_dir, pass)?;
-                    cmd.args(["-o", "BatchMode=no"]);
+                #[cfg(unix)]
+                {
+                    if let Some(pass) = passphrase {
+                        let proxy = Arc::new(
+                            AskpassProxy::new()
+                                .await
+                                .context("Failed to create askpass proxy for key test")?,
+                        );
+                        Self::configure_askpass_env(&mut cmd, &proxy);
+
+                        let proxy_clone = Arc::clone(&proxy);
+                        let pass = pass.clone();
+                        smol::spawn(async move {
+                            let _ = proxy_clone
+                                .serve_password_with_timeout(&pass, Duration::from_secs(30))
+                                .await;
+                        })
+                        .detach();
+
+                        _proxy_handle = Some(proxy);
+                    } else {
+                        cmd.args(["-o", "BatchMode=yes"]);
+                        _proxy_handle = None;
+                    }
                 }
             }
         }

@@ -339,6 +339,7 @@ impl Render for Workspace {
             ConnectionStatus::Connected => self.render_connected(cx),
             ConnectionStatus::Disconnecting => self.render_loading(cx),
             ConnectionStatus::Connecting => self.render_loading(cx),
+            ConnectionStatus::ConnectingTunnel => self.render_loading(cx),
         };
 
         div()

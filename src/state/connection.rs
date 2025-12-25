@@ -1,5 +1,6 @@
 use gpui::*;
 
+use crate::services::ssh::TunnelId;
 use crate::services::{AppStore, ConnectionInfo, DatabaseManager};
 
 #[derive(Clone, PartialEq)]
@@ -7,6 +8,7 @@ pub enum ConnectionStatus {
     Disconnected,
     Disconnecting,
     Connecting,
+    ConnectingTunnel,
     Connected,
 }
 
@@ -15,6 +17,8 @@ pub struct ConnectionState {
     pub active_connection: Option<ConnectionInfo>,
     pub db_manager: DatabaseManager,
     pub connection_state: ConnectionStatus,
+    /// Active SSH tunnel ID for the current connection
+    pub active_tunnel_id: Option<TunnelId>,
 }
 
 impl Global for ConnectionState {}
@@ -27,6 +31,7 @@ impl ConnectionState {
             active_connection: None,
             db_manager,
             connection_state: ConnectionStatus::Disconnected,
+            active_tunnel_id: None,
         };
         cx.set_global(this);
 

@@ -14,6 +14,7 @@ use smol::io::{AsyncBufReadExt, BufReader};
 use smol::net::TcpListener;
 use smol::process::{Child, Command, Stdio};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 /// An active SSH tunnel using the system ssh binary with -L port forwarding.
@@ -25,7 +26,15 @@ pub struct SshTunnel {
     /// Uses Arc so we can share with the password-serving task.
     #[cfg(unix)]
     _askpass_proxy: Option<Arc<AskpassProxy>>,
+    /// Cancellation flag to stop askpass tasks when tunnel is shutting down.
+    #[cfg(unix)]
+    cancelled: Arc<AtomicBool>,
 }
+
+/// Maximum attempts to find and bind to an available port.
+/// This handles the TOCTOU race condition where another process could grab
+/// the port between when we find it and when SSH tries to bind.
+const MAX_PORT_RETRY_ATTEMPTS: u32 = 3;
 
 #[allow(dead_code)]
 impl SshTunnel {
@@ -33,13 +42,50 @@ impl SshTunnel {
     ///
     /// This spawns an `ssh -L` process that forwards a local port to the remote host.
     pub async fn start(config: SshTunnelConfig) -> Result<Self> {
-        // Find an available local port if not specified
-        let local_port = if config.local_bind_port == 0 {
-            Self::find_available_port(&config.local_bind_host).await?
-        } else {
-            config.local_bind_port
-        };
+        // If user specified a port, use it directly (no retry on port conflicts)
+        if config.local_bind_port != 0 {
+            return Self::start_with_port(config.clone(), config.local_bind_port).await;
+        }
 
+        // Auto port selection: retry if we hit a port race condition
+        let mut last_error = None;
+        for attempt in 1..=MAX_PORT_RETRY_ATTEMPTS {
+            let local_port = Self::find_available_port(&config.local_bind_host).await?;
+
+            match Self::start_with_port(config.clone(), local_port).await {
+                Ok(tunnel) => return Ok(tunnel),
+                Err(e) => {
+                    let error_str = e.to_string();
+                    // Check if this looks like a port binding issue
+                    if error_str.contains("not listening")
+                        || error_str.contains("Address already in use")
+                    {
+                        tracing::warn!(
+                            "Port {} was taken before SSH could bind (attempt {}/{}), retrying with new port",
+                            local_port,
+                            attempt,
+                            MAX_PORT_RETRY_ATTEMPTS
+                        );
+                        last_error = Some(e);
+                        continue;
+                    }
+                    // Non-port-related error, don't retry
+                    return Err(e);
+                }
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| {
+            anyhow::anyhow!(
+                "Failed to find available port after {} attempts",
+                MAX_PORT_RETRY_ATTEMPTS
+            )
+        }))
+    }
+
+    /// Start a tunnel with a specific local port.
+    /// This is the inner implementation used by start().
+    async fn start_with_port(config: SshTunnelConfig, local_port: u16) -> Result<Self> {
         // Build the port forwarding spec: local_port:remote_host:remote_port
         let forward_spec = format!(
             "{}:{}:{}:{}",
@@ -48,7 +94,9 @@ impl SshTunnel {
 
         let mut cmd = Command::new("ssh");
 
-        // Kill the ssh process when this handle is dropped
+        // Kill the ssh process when the Child is dropped. The async-process crate's
+        // internal Reaper task will asynchronously wait on the process to prevent
+        // zombie processes, so no explicit Drop implementation is needed.
         cmd.kill_on_drop(true);
 
         // Don't need stdin for the tunnel, capture stdout/stderr for debugging
@@ -84,6 +132,8 @@ impl SshTunnel {
         // Handle authentication - set up askpass proxy if needed
         #[cfg(unix)]
         let askpass_proxy: Option<Arc<AskpassProxy>>;
+        #[cfg(unix)]
+        let cancelled = Arc::new(AtomicBool::new(false));
 
         match &config.auth_method {
             SshAuthMethod::Agent => {
@@ -107,10 +157,16 @@ impl SshTunnel {
                     // The proxy is kept alive by the Arc in the tunnel struct.
                     let proxy_clone = Arc::clone(&proxy);
                     let password = password.clone();
+                    let cancelled_clone = Arc::clone(&cancelled);
                     smol::spawn(async move {
                         // Serve password multiple times in case SSH re-prompts
                         // (e.g., for 2FA or retry on typo)
                         for attempt in 0..3 {
+                            // Check if tunnel was cancelled before waiting
+                            if cancelled_clone.load(Ordering::Relaxed) {
+                                tracing::debug!("Askpass task cancelled before attempt {}", attempt + 1);
+                                break;
+                            }
                             match proxy_clone
                                 .serve_password_with_timeout(&password, Duration::from_secs(60))
                                 .await
@@ -122,11 +178,15 @@ impl SshTunnel {
                                     );
                                 }
                                 Ok(false) => {
-                                    // Timeout - SSH probably authenticated already
-                                    tracing::debug!(
-                                        "Askpass timeout (attempt {}), SSH may be authenticated",
-                                        attempt + 1
-                                    );
+                                    // Timeout - SSH probably authenticated already or cancelled
+                                    if cancelled_clone.load(Ordering::Relaxed) {
+                                        tracing::debug!("Askpass task cancelled during timeout");
+                                    } else {
+                                        tracing::debug!(
+                                            "Askpass timeout (attempt {}), SSH may be authenticated",
+                                            attempt + 1
+                                        );
+                                    }
                                     break;
                                 }
                                 Err(e) => {
@@ -165,8 +225,18 @@ impl SshTunnel {
 
                         let proxy_clone = Arc::clone(&proxy);
                         let pass = pass.clone();
+                        let cancelled_clone = Arc::clone(&cancelled);
                         smol::spawn(async move {
+                            // SSH may prompt multiple times for passphrase
                             for attempt in 0..3 {
+                                // Check if tunnel was cancelled before waiting
+                                if cancelled_clone.load(Ordering::Relaxed) {
+                                    tracing::debug!(
+                                        "Askpass passphrase task cancelled before attempt {}",
+                                        attempt + 1
+                                    );
+                                    break;
+                                }
                                 match proxy_clone
                                     .serve_password_with_timeout(&pass, Duration::from_secs(60))
                                     .await
@@ -178,14 +248,21 @@ impl SshTunnel {
                                         );
                                     }
                                     Ok(false) => {
-                                        tracing::debug!(
-                                            "Askpass timeout for key (attempt {})",
-                                            attempt + 1
-                                        );
+                                        // Timeout or cancelled
+                                        if cancelled_clone.load(Ordering::Relaxed) {
+                                            tracing::debug!(
+                                                "Askpass passphrase task cancelled during timeout"
+                                            );
+                                        } else {
+                                            tracing::debug!(
+                                                "Askpass timeout for passphrase (attempt {})",
+                                                attempt + 1
+                                            );
+                                        }
                                         break;
                                     }
                                     Err(e) => {
-                                        tracing::warn!("Askpass proxy error for key: {}", e);
+                                        tracing::warn!("Askpass proxy error for passphrase: {}", e);
                                         break;
                                     }
                                 }
@@ -304,6 +381,8 @@ impl SshTunnel {
             process,
             #[cfg(unix)]
             _askpass_proxy: askpass_proxy,
+            #[cfg(unix)]
+            cancelled,
         })
     }
 
@@ -346,6 +425,10 @@ impl SshTunnel {
     /// Shutdown the tunnel gracefully.
     pub async fn shutdown(mut self) {
         tracing::debug!("Shutting down SSH tunnel to {}", self.config.ssh_url());
+
+        // Signal askpass tasks to stop waiting
+        #[cfg(unix)]
+        self.cancelled.store(true, Ordering::Relaxed);
 
         // Try graceful termination first
         #[cfg(unix)]
@@ -479,12 +562,5 @@ impl SshTunnel {
                 stderr.trim()
             )
         }
-    }
-}
-
-impl Drop for SshTunnel {
-    fn drop(&mut self) {
-        // Ensure process is killed when tunnel is dropped
-        let _ = self.process.kill();
     }
 }

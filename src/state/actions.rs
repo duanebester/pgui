@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use gpui::*;
 
-use crate::services::ssh::{SshAuthMethod, SshService, SshTunnelConfig, TunnelId};
+use crate::services::ssh::{ReconnectConfig, SshAuthMethod, SshService, SshTunnelConfig, TunnelId};
 use crate::services::{
     AppStore, ConnectionInfo, ConnectionsRepository, DatabaseManager, SshAuthType,
 };
@@ -57,8 +57,14 @@ pub fn connect(connection_info: &ConnectionInfo, cx: &mut App) {
             let ssh_tunnel = cic.ssh_tunnel.as_ref().unwrap();
             let tunnel_config = build_tunnel_config(&cic, ssh_tunnel);
 
-            // Create the SSH tunnel
-            match SshService::create_tunnel(tunnel_config, state_tx).await {
+            // Create the SSH tunnel with automatic retry on transient failures
+            match SshService::create_tunnel_with_retry(
+                tunnel_config,
+                state_tx,
+                ReconnectConfig::default(),
+            )
+            .await
+            {
                 Ok((tunnel_id, tunnel, _config)) => {
                     let local_addr = tunnel.local_addr();
                     tracing::info!("SSH tunnel established at {}", local_addr);
@@ -123,10 +129,20 @@ fn build_tunnel_config(
             .unwrap_or_default();
             SshAuthMethod::Password(password)
         }
-        SshAuthType::PublicKey => SshAuthMethod::PublicKey {
-            private_key_path: ssh_tunnel.private_key_path.clone().unwrap_or_default(),
-            passphrase: None,
-        },
+        SshAuthType::PublicKey => {
+            let private_key_path = ssh_tunnel.private_key_path.clone().unwrap_or_default();
+            // Try to load key passphrase from keychain
+            let passphrase = SshService::get_stored_key_passphrase(
+                &ssh_tunnel.ssh_host,
+                ssh_tunnel.ssh_port,
+                &ssh_tunnel.ssh_user,
+                &private_key_path,
+            );
+            SshAuthMethod::PublicKey {
+                private_key_path,
+                passphrase,
+            }
+        }
     };
 
     SshTunnelConfig {
@@ -171,8 +187,13 @@ pub fn disconnect(cx: &mut App) {
 
 /// Changes to a different database on the same server.
 /// Disconnects from current database and reconnects to the new one.
+/// Preserves existing SSH tunnel if one is active.
 pub fn change_database(database_name: String, cx: &mut App) {
     let current_connection = cx.global::<ConnectionState>().active_connection.clone();
+    let tunnel_id = cx.global::<ConnectionState>().active_tunnel_id.clone();
+
+    // Get tunnel local address if we have an active tunnel
+    let tunnel_addr = tunnel_id.and_then(|id| cx.global::<SshService>().local_addr(id).clone());
 
     if let Some(mut new_connection) = current_connection {
         new_connection.database = database_name;
@@ -184,7 +205,28 @@ pub fn change_database(database_name: String, cx: &mut App) {
             cx.background_executor()
                 .timer(Duration::from_millis(100))
                 .await;
-            // Connect to the new database
+
+            // If we have an active SSH tunnel, connect through it
+            if let (Some(tunnel_id), Some(addr)) = (tunnel_id, tunnel_addr) {
+                let parts: Vec<&str> = addr.split(':').collect();
+                if parts.len() == 2 {
+                    let tunnel_host = parts[0].to_string();
+                    let tunnel_port: u16 = parts[1].parse().unwrap_or(5432);
+
+                    connect_async_via_tunnel(
+                        new_connection,
+                        tunnel_host,
+                        tunnel_port,
+                        tunnel_id,
+                        db_manager,
+                        cx.clone(),
+                    )
+                    .await;
+                    return;
+                }
+            }
+
+            // Direct connection (no SSH tunnel)
             connect_async(new_connection, db_manager, cx).await;
         })
         .detach();

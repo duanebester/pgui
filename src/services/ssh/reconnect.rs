@@ -67,11 +67,74 @@ impl ExponentialBackoff {
         self.attempt
     }
 
+    /// Get the maximum number of attempts (or u32::MAX if unlimited)
+    pub fn max_attempts(&self) -> u32 {
+        self.config.max_attempts.unwrap_or(u32::MAX)
+    }
+
     /// Reset the backoff to initial state
     pub fn reset(&mut self) {
         self.current_delay = self.config.initial_delay;
         self.attempt = 0;
     }
+}
+
+/// Determine if an SSH tunnel error is retriable.
+///
+/// Non-retriable errors (return false):
+/// - Authentication failures (wrong password, key rejected)
+/// - Permission denied
+/// - Host key verification failures
+///
+/// Retriable errors (return true):
+/// - Connection refused (server temporarily down)
+/// - Connection timed out (network issues)
+/// - Port binding issues (race condition)
+/// - Network unreachable
+pub fn is_retriable_error(error: &anyhow::Error) -> bool {
+    let error_str = error.to_string().to_lowercase();
+
+    // Non-retriable: authentication and permission errors
+    let non_retriable_patterns = [
+        "permission denied",
+        "authentication failed",
+        "auth fail",
+        "host key verification failed",
+        "no supported authentication",
+        "too many authentication failures",
+        "invalid password",
+        "key rejected",
+        "publickey denied",
+    ];
+
+    for pattern in &non_retriable_patterns {
+        if error_str.contains(pattern) {
+            return false;
+        }
+    }
+
+    // Retriable: network and transient errors
+    let retriable_patterns = [
+        "connection refused",
+        "connection timed out",
+        "connection reset",
+        "network unreachable",
+        "host unreachable",
+        "no route to host",
+        "not listening",
+        "address already in use",
+        "temporary failure",
+        "try again",
+    ];
+
+    for pattern in &retriable_patterns {
+        if error_str.contains(pattern) {
+            return true;
+        }
+    }
+
+    // Default: don't retry unknown errors (fail fast)
+    false
 }
 
 #[cfg(test)]
@@ -112,6 +175,52 @@ mod tests {
         backoff.reset();
         assert_eq!(backoff.attempt(), 0);
         assert_eq!(backoff.next_delay(), Some(Duration::from_secs(1)));
+
+        // Test max_attempts helper
+        assert_eq!(backoff.max_attempts(), 4);
+    }
+
+    #[test]
+    fn test_unlimited_attempts() {
+        let config = ReconnectConfig {
+            initial_delay: Duration::from_secs(1),
+            max_delay: Duration::from_secs(10),
+            multiplier: 2.0,
+            max_attempts: None, // Unlimited
+        };
+
+        let backoff = ExponentialBackoff::new(config);
+        assert_eq!(backoff.max_attempts(), u32::MAX);
+    }
+
+    #[test]
+    fn test_is_retriable_error() {
+        // Non-retriable errors
+        let auth_error = anyhow::anyhow!("Permission denied (publickey,password)");
+        assert!(!is_retriable_error(&auth_error));
+
+        let auth_error2 = anyhow::anyhow!("Authentication failed for user@host");
+        assert!(!is_retriable_error(&auth_error2));
+
+        let host_key_error = anyhow::anyhow!("Host key verification failed");
+        assert!(!is_retriable_error(&host_key_error));
+
+        // Retriable errors
+        let connection_refused = anyhow::anyhow!("Connection refused by host");
+        assert!(is_retriable_error(&connection_refused));
+
+        let timeout = anyhow::anyhow!("Connection timed out");
+        assert!(is_retriable_error(&timeout));
+
+        let port_error = anyhow::anyhow!("SSH tunnel failed - local port 12345 not listening");
+        assert!(is_retriable_error(&port_error));
+
+        let network_error = anyhow::anyhow!("Network unreachable");
+        assert!(is_retriable_error(&network_error));
+
+        // Unknown errors default to non-retriable
+        let unknown = anyhow::anyhow!("Something weird happened");
+        assert!(!is_retriable_error(&unknown));
     }
 
     #[test]

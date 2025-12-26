@@ -215,9 +215,11 @@ impl SshService {
         // Try to load credentials from keychain if not provided
         match &config.auth_method {
             SshAuthMethod::Password(password) if password.is_empty() => {
-                if let Some(stored) =
-                    Self::get_stored_password(&config.ssh_host, config.ssh_port, &config.ssh_user)
-                {
+                if let Some(stored) = Self::get_stored_password(
+                    &config.ssh_host.to_string(),
+                    config.ssh_port,
+                    &config.ssh_user,
+                ) {
                     config.auth_method = SshAuthMethod::Password(stored);
                 }
             }
@@ -226,7 +228,7 @@ impl SshService {
                 passphrase,
             } if passphrase.is_none() => {
                 if let Some(stored) = Self::get_stored_key_passphrase(
-                    &config.ssh_host,
+                    &config.ssh_host.to_string(),
                     config.ssh_port,
                     &config.ssh_user,
                     private_key_path,
@@ -251,7 +253,7 @@ impl SshService {
                 match &config.auth_method {
                     SshAuthMethod::Password(password) if !password.is_empty() => {
                         let _ = Self::store_password(
-                            &config.ssh_host,
+                            &config.ssh_host.to_string(),
                             config.ssh_port,
                             &config.ssh_user,
                             password,
@@ -262,7 +264,7 @@ impl SshService {
                         passphrase: Some(passphrase),
                     } if !passphrase.is_empty() => {
                         let _ = Self::store_key_passphrase(
-                            &config.ssh_host,
+                            &config.ssh_host.to_string(),
                             config.ssh_port,
                             &config.ssh_user,
                             private_key_path,
@@ -331,9 +333,11 @@ impl SshService {
         let mut config = config;
         match &config.auth_method {
             SshAuthMethod::Password(password) if password.is_empty() => {
-                if let Some(stored) =
-                    Self::get_stored_password(&config.ssh_host, config.ssh_port, &config.ssh_user)
-                {
+                if let Some(stored) = Self::get_stored_password(
+                    &config.ssh_host.to_string(),
+                    config.ssh_port,
+                    &config.ssh_user,
+                ) {
                     config.auth_method = SshAuthMethod::Password(stored);
                 }
             }
@@ -342,7 +346,7 @@ impl SshService {
                 passphrase,
             } if passphrase.is_none() => {
                 if let Some(stored) = Self::get_stored_key_passphrase(
-                    &config.ssh_host,
+                    &config.ssh_host.to_string(),
                     config.ssh_port,
                     &config.ssh_user,
                     private_key_path,
@@ -386,7 +390,7 @@ impl SshService {
                     match &config.auth_method {
                         SshAuthMethod::Password(password) if !password.is_empty() => {
                             let _ = Self::store_password(
-                                &config.ssh_host,
+                                &config.ssh_host.to_string(),
                                 config.ssh_port,
                                 &config.ssh_user,
                                 password,
@@ -397,7 +401,7 @@ impl SshService {
                             passphrase: Some(passphrase),
                         } if !passphrase.is_empty() => {
                             let _ = Self::store_key_passphrase(
-                                &config.ssh_host,
+                                &config.ssh_host.to_string(),
                                 config.ssh_port,
                                 &config.ssh_user,
                                 private_key_path,

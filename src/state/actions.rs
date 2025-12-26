@@ -7,7 +7,9 @@ use std::time::Duration;
 
 use gpui::*;
 
-use crate::services::ssh::{ReconnectConfig, SshAuthMethod, SshService, SshTunnelConfig, TunnelId};
+use crate::services::ssh::{
+    Host, ReconnectConfig, SshAuthMethod, SshService, SshTunnelConfig, TunnelId,
+};
 use crate::services::{
     AppStore, ConnectionInfo, ConnectionsRepository, DatabaseManager, SshAuthType,
 };
@@ -146,13 +148,13 @@ fn build_tunnel_config(
     };
 
     SshTunnelConfig {
-        ssh_host: ssh_tunnel.ssh_host.clone(),
+        ssh_host: Host::from(ssh_tunnel.ssh_host.as_str()),
         ssh_port: ssh_tunnel.ssh_port,
         ssh_user: ssh_tunnel.ssh_user.clone(),
         auth_method,
-        remote_host: connection.hostname.clone(),
+        remote_host: Host::from(connection.hostname.as_str()),
         remote_port: connection.port as u16,
-        local_bind_host: "127.0.0.1".to_string(),
+        local_bind_host: Host::from("127.0.0.1"),
         local_bind_port: 0, // Auto-assign
         extra_args: vec![],
     }

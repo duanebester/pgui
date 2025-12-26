@@ -15,4 +15,4 @@ pub use askpass::{AskpassProxy, handle_askpass_mode};
 pub use reconnect::{ExponentialBackoff, ReconnectConfig};
 pub use service::{SshService, TunnelId, TunnelState};
 pub use tunnel::SshTunnel;
-pub use types::{SshAuthMethod, SshTunnelConfig};
+pub use types::{Host, SshAuthMethod, SshTunnelConfig};

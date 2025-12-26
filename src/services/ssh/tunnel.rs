@@ -7,7 +7,7 @@
 //! - Works with ProxyJump/bastion hosts
 
 use super::askpass::AskpassProxy;
-use super::types::{SshAuthMethod, SshTunnelConfig};
+use super::types::{Host, SshAuthMethod, SshTunnelConfig};
 use anyhow::{Context, Result};
 use futures::StreamExt;
 use smol::io::{AsyncBufReadExt, BufReader};
@@ -86,10 +86,13 @@ impl SshTunnel {
     /// Start a tunnel with a specific local port.
     /// This is the inner implementation used by start().
     async fn start_with_port(config: SshTunnelConfig, local_port: u16) -> Result<Self> {
-        // Build the port forwarding spec: local_port:remote_host:remote_port
+        // Build the port forwarding spec with bracketed IPv6 addresses
         let forward_spec = format!(
             "{}:{}:{}:{}",
-            config.local_bind_host, local_port, config.remote_host, config.remote_port
+            config.local_bind_host.to_bracketed_string(),
+            local_port,
+            config.remote_host.to_bracketed_string(),
+            config.remote_port
         );
 
         let mut cmd = Command::new("ssh");
@@ -346,7 +349,11 @@ impl SshTunnel {
         }
 
         // Try to verify the local port is actually listening
-        let verify_addr = format!("{}:{}", config.local_bind_host, local_port);
+        let verify_addr = format!(
+            "{}:{}",
+            config.local_bind_host.to_bracketed_string(),
+            local_port
+        );
         let mut retries = 10;
         while retries > 0 {
             match smol::net::TcpStream::connect(&verify_addr).await {
@@ -398,8 +405,8 @@ impl SshTunnel {
     }
 
     /// Find an available port to bind to
-    async fn find_available_port(bind_host: &str) -> Result<u16> {
-        let listener = TcpListener::bind(format!("{}:0", bind_host))
+    async fn find_available_port(bind_host: &Host) -> Result<u16> {
+        let listener = TcpListener::bind(format!("{}:0", bind_host.to_bracketed_string()))
             .await
             .context("Failed to find available port")?;
         let port = listener.local_addr()?.port();
@@ -412,9 +419,13 @@ impl SshTunnel {
         self.local_port
     }
 
-    /// Get the local address to connect to (e.g., "127.0.0.1:12345").
+    /// Get the local address to connect to (e.g., "127.0.0.1:12345" or "[::1]:12345").
     pub fn local_addr(&self) -> String {
-        format!("{}:{}", self.config.local_bind_host, self.local_port)
+        format!(
+            "{}:{}",
+            self.config.local_bind_host.to_bracketed_string(),
+            self.local_port
+        )
     }
 
     /// Check if the tunnel process is still running.

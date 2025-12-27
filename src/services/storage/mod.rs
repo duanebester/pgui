@@ -155,6 +155,32 @@ impl AppStore {
             tracing::debug!("Migration: ssl_mode column already exists");
         }
 
+        // Migration: Add SSH tunnel columns
+        let has_ssh_columns = sqlx::query("SELECT ssh_enabled FROM connections LIMIT 1")
+            .fetch_optional(&self.pool)
+            .await
+            .is_ok();
+
+        if !has_ssh_columns {
+            tracing::debug!("Migration: Adding SSH tunnel columns...");
+
+            let migrations = [
+                "ALTER TABLE connections ADD COLUMN ssh_enabled INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE connections ADD COLUMN ssh_host TEXT NOT NULL DEFAULT ''",
+                "ALTER TABLE connections ADD COLUMN ssh_port INTEGER NOT NULL DEFAULT 22",
+                "ALTER TABLE connections ADD COLUMN ssh_user TEXT NOT NULL DEFAULT ''",
+                "ALTER TABLE connections ADD COLUMN ssh_auth_type TEXT NOT NULL DEFAULT 'agent'",
+                "ALTER TABLE connections ADD COLUMN ssh_private_key_path TEXT",
+            ];
+
+            for migration in migrations {
+                match sqlx::query(migration).execute(&self.pool).await {
+                    Ok(_) => tracing::debug!("Migration: Executed: {}", migration),
+                    Err(e) => tracing::warn!("Migration: May already exist: {}", e),
+                }
+            }
+        }
+
         Ok(())
     }
 }

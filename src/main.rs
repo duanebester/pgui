@@ -8,6 +8,7 @@ mod workspace;
 use assets::*;
 use gpui::{App, AppContext as _, Application, KeyBinding, actions};
 use gpui_component::{ActiveTheme as _, Root, theme};
+use services::ssh::handle_askpass_mode;
 use themes::*;
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt as _, util::SubscriberInitExt as _};
 use window::*;
@@ -33,6 +34,10 @@ fn init_logging() {
 }
 
 fn main() {
+    // Handle --askpass mode first (before any other initialization)
+    // This is used by SSH_ASKPASS to securely retrieve passwords
+    handle_askpass_mode();
+
     init_logging();
     tracing::info!("Starting PGUI v{}", env!("CARGO_PKG_VERSION"));
 

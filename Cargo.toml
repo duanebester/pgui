@@ -12,6 +12,11 @@ path = "src/bin/build_app.rs"
 name = "release"
 path = "src/bin/release.rs"
 
+[[bin]]
+name = "test_ssh_tunnel"
+path = "src/bin/test_ssh_tunnel.rs"
+
+
 [dependencies]
 anyhow = "1.0"
 async-channel = "2.5"
@@ -41,6 +46,8 @@ tree-sitter-sequel = "0.3.8"
 url = "2.5"
 uuid = { version = "1", features = ["v4", "serde"] }
 semver = "1.0.27"
+tempfile = "3"
+libc = "0.2"
 
 [dev-dependencies]
 tempfile = "3"

@@ -25,6 +25,7 @@ pub use actions::{
     add_connection, change_database, connect, delete_connection, disconnect, update_connection,
 };
 
+use crate::services::ssh::SshService;
 use gpui::App;
 
 /// Initialize all global state.
@@ -34,4 +35,5 @@ pub fn init(cx: &mut App) {
     EditorState::init(cx);
     EditorCodeActions::init(cx);
     EditorInlineCompletions::init(cx);
+    SshService::init(cx);
 }

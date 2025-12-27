@@ -28,13 +28,13 @@ impl DatabaseManager {
             Ok(p) => {
                 let mut pool_guard = self.pool.write().await;
                 *pool_guard = Some(p);
+                Ok(())
             }
             Err(e) => {
-                tracing::error!("Error Connecting: {}", e)
+                tracing::error!("Error Connecting: {}", e);
+                Err(e.into())
             }
-        };
-
-        Ok(())
+        }
     }
 
     #[allow(dead_code)]

@@ -1,0 +1,41 @@
+services:
+  ssh-server:
+    image: lscr.io/linuxserver/openssh-server:latest
+    container_name: pgui-ssh-server
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+      - PASSWORD_ACCESS=true
+      - USER_NAME=testuser
+      - USER_PASSWORD=testpass
+      - SUDO_ACCESS=false
+      - LISTEN_PORT=22
+    ports:
+      - "2222:22"
+    networks:
+      - ssh-test-net
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "22"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    entrypoint: /bin/bash
+    command: >
+      -c "sed -i 's/AllowTcpForwarding no/AllowTcpForwarding yes/' /etc/ssh/sshd_config &&
+          exec /init"
+
+  postgres:
+    image: postgres:16
+    container_name: pgui-ssh-postgres
+    environment:
+      - POSTGRES_USER=pguser
+      - POSTGRES_PASSWORD=pgpass
+      - POSTGRES_DB=testdb
+    networks:
+      - ssh-test-net
+
+networks:
+  ssh-test-net:
+    driver: bridge

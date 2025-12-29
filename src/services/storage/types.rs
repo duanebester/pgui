@@ -180,6 +180,7 @@ impl SshAuthType {
     }
 
     /// Get a description of what this auth type does
+    #[allow(dead_code)]
     pub fn description(&self) -> &str {
         match self {
             SshAuthType::Agent => "Use ssh-agent for authentication (recommended)",
@@ -253,6 +254,7 @@ pub struct SshTunnelInfo {
     pub private_key_path: Option<String>,
 }
 
+#[allow(dead_code)]
 impl SshTunnelInfo {
     /// Create a new SSH tunnel configuration
     pub fn new(ssh_host: String, ssh_port: u16, ssh_user: String, auth_type: SshAuthType) -> Self {
@@ -295,6 +297,7 @@ pub struct ConnectionInfo {
     pub ssh_tunnel: Option<SshTunnelInfo>,
 }
 
+#[allow(dead_code)]
 impl ConnectionInfo {
     /// Create a new connection info with the given parameters
     pub fn new(

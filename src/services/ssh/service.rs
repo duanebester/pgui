@@ -33,9 +33,11 @@ pub enum TunnelState {
     /// Tunnel failed, not retrying
     Failed { error: String },
     /// Tunnel was intentionally closed
+    #[allow(dead_code)]
     Closed,
 }
 
+#[allow(dead_code)]
 impl TunnelState {
     /// Returns true if the tunnel is usable for connections
     pub fn is_connected(&self) -> bool {
@@ -52,6 +54,7 @@ impl TunnelState {
 }
 
 /// Managed tunnel with state tracking
+#[allow(dead_code)]
 struct ManagedTunnel {
     tunnel: SshTunnel,
     #[allow(dead_code)]
@@ -65,6 +68,7 @@ struct ManagedTunnel {
 /// - State updates for UI feedback
 /// - Lifecycle management
 /// - Keychain storage for SSH passwords
+#[allow(dead_code)]
 pub struct SshService {
     tunnels: HashMap<TunnelId, ManagedTunnel>,
     /// Channel for broadcasting state changes
@@ -74,6 +78,7 @@ pub struct SshService {
 
 impl Global for SshService {}
 
+#[allow(dead_code)]
 impl SshService {
     /// Create a new SSH service
     pub fn new() -> Self {

@@ -5,7 +5,7 @@ use gpui_component::{
     input::{Input, InputState},
     label::Label,
     notification::NotificationType,
-    select::{Select, SelectEvent, SelectState},
+    select::{Select, SelectState},
     switch::Switch,
     *,
 };

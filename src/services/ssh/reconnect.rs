@@ -73,6 +73,7 @@ impl ExponentialBackoff {
     }
 
     /// Reset the backoff to initial state
+    #[allow(dead_code)]
     pub fn reset(&mut self) {
         self.current_delay = self.config.initial_delay;
         self.attempt = 0;

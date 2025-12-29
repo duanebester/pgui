@@ -30,6 +30,7 @@ gpui = "0.2"
 gpui-component = { version = "0.5", features = ["tree-sitter-languages"] }
 hex = "0.4"
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+libc = "0.2"
 lsp-types = "0.97.0"
 rust-embed = "8.2.0"
 rust_decimal = "1.37.1"
@@ -39,6 +40,7 @@ smol = "2"
 smolhttp = "1"
 sqlformat = "0.3.5"
 sqlx = { version = "0.8", features = [ "runtime-async-std", "tls-native-tls", "postgres", "sqlite", "rust_decimal" ] }
+tempfile = "3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tree-sitter = "0.25.6"
@@ -46,8 +48,7 @@ tree-sitter-sequel = "0.3.8"
 url = "2.5"
 uuid = { version = "1", features = ["v4", "serde"] }
 semver = "1.0.27"
-tempfile = "3"
-libc = "0.2"
+
 
 [dev-dependencies]
 tempfile = "3"

@@ -131,10 +131,7 @@ async fn connect_async(mut cic: ConnectionInfo, db_manager: DatabaseManager, cx:
         return;
     }
 
-    // Use secure connection options instead of string
-    let connect_options = cic.to_pg_connect_options();
-
-    if let Ok(_) = db_manager.connect_with_options(connect_options).await {
+    if let Ok(_) = db_manager.connect(&cic).await {
         if let Ok(tables) = db_manager.get_tables().await {
             let _ = cx.update_global::<EditorState, _>(|state, _cx| {
                 state.tables = tables;

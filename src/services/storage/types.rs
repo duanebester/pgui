@@ -361,6 +361,11 @@ impl Drop for ConnectionInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::services::ssh::{SshAuth, SshConfig};
+
+    // ====================================================================
+    // DatabaseDriver
+    // ====================================================================
 
     #[test]
     fn database_driver_db_str_roundtrip() {
@@ -372,6 +377,17 @@ mod tests {
             DatabaseDriver::from_db_str("future-driver"),
             DatabaseDriver::Postgres
         );
+        // Empty string -> Postgres (avoids panicking on legacy rows).
+        assert_eq!(DatabaseDriver::from_db_str(""), DatabaseDriver::Postgres);
+    }
+
+    #[test]
+    fn database_driver_index_roundtrip() {
+        for d in DatabaseDriver::all() {
+            assert_eq!(DatabaseDriver::from_index(d.to_index()), d);
+        }
+        // Out-of-range -> Postgres.
+        assert_eq!(DatabaseDriver::from_index(99), DatabaseDriver::Postgres);
     }
 
     #[test]
@@ -381,26 +397,93 @@ mod tests {
     }
 
     #[test]
-    fn ssl_mode_pg_and_mysql_mappings() {
-        // sqlx's SslMode types don't impl PartialEq, so compare via Debug.
-        assert_eq!(
-            format!("{:?}", SslMode::Disable.to_mysql_ssl_mode()),
-            "Disabled"
-        );
-        assert_eq!(
-            format!("{:?}", SslMode::VerifyFull.to_mysql_ssl_mode()),
-            "VerifyIdentity"
-        );
-        assert_eq!(
-            format!("{:?}", SslMode::VerifyFull.to_pg_ssl_mode()),
-            "VerifyFull"
-        );
+    fn database_driver_serde_roundtrip() {
+        // The on-disk JSON form for the driver field should be lowercase.
+        for d in DatabaseDriver::all() {
+            let json = serde_json::to_string(&d).unwrap();
+            let back: DatabaseDriver = serde_json::from_str(&json).unwrap();
+            assert_eq!(d, back);
+            // Confirm the rename_all="lowercase" attribute really did fire.
+            assert!(
+                json == "\"postgres\"" || json == "\"mysql\"",
+                "unexpected driver json {}",
+                json
+            );
+        }
     }
 
     #[test]
-    fn ssh_config_serde_roundtrip() {
-        use crate::services::ssh::{SshAuth, SshConfig};
+    fn database_driver_default_is_postgres() {
+        assert_eq!(DatabaseDriver::default(), DatabaseDriver::Postgres);
+    }
 
+    #[test]
+    fn database_driver_select_item_titles() {
+        use gpui_component::select::SelectItem;
+        assert_eq!(
+            DatabaseDriver::Postgres.title().to_string(),
+            "PostgreSQL"
+        );
+        assert_eq!(DatabaseDriver::MySql.title().to_string(), "MySQL");
+    }
+
+    // ====================================================================
+    // SslMode
+    // ====================================================================
+
+    #[test]
+    fn ssl_mode_db_str_roundtrip() {
+        for m in SslMode::all() {
+            assert_eq!(SslMode::from_db_str(m.to_db_str()), m);
+        }
+        // Unknown values fall back to Prefer.
+        assert_eq!(SslMode::from_db_str("banana"), SslMode::Prefer);
+    }
+
+    #[test]
+    fn ssl_mode_index_roundtrip() {
+        for m in SslMode::all() {
+            assert_eq!(SslMode::from_index(m.to_index()), m);
+        }
+        // Out-of-range -> Prefer.
+        assert_eq!(SslMode::from_index(42), SslMode::Prefer);
+    }
+
+    #[test]
+    fn ssl_mode_pg_mappings_complete() {
+        // sqlx's SslMode types don't impl PartialEq, so compare via Debug.
+        let cases = [
+            (SslMode::Disable, "Disable"),
+            (SslMode::Prefer, "Prefer"),
+            (SslMode::Require, "Require"),
+            (SslMode::VerifyCa, "VerifyCa"),
+            (SslMode::VerifyFull, "VerifyFull"),
+        ];
+        for (m, expected) in cases {
+            assert_eq!(format!("{:?}", m.to_pg_ssl_mode()), expected);
+        }
+    }
+
+    #[test]
+    fn ssl_mode_mysql_mappings_complete() {
+        let cases = [
+            (SslMode::Disable, "Disabled"),
+            (SslMode::Prefer, "Preferred"),
+            (SslMode::Require, "Required"),
+            (SslMode::VerifyCa, "VerifyCa"),
+            (SslMode::VerifyFull, "VerifyIdentity"),
+        ];
+        for (m, expected) in cases {
+            assert_eq!(format!("{:?}", m.to_mysql_ssl_mode()), expected);
+        }
+    }
+
+    // ====================================================================
+    // SshConfig / SshAuth
+    // ====================================================================
+
+    #[test]
+    fn ssh_config_serde_keyfile_roundtrip() {
         let cfg = SshConfig {
             host: "bastion.example.com".to_string(),
             port: 2222,
@@ -410,15 +493,46 @@ mod tests {
             },
         };
         let json = serde_json::to_string(&cfg).unwrap();
+        // Tagged enum with snake_case discriminator.
+        assert!(json.contains("\"type\":\"key_file\""), "got {}", json);
         let back: SshConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(cfg, back);
-        // Defaults: omitting `auth` should give Agent.
-        let agent_cfg: SshConfig = serde_json::from_str(
-            r#"{"host":"h","port":22,"username":"u","auth":{"type":"agent"}}"#,
-        )
-        .unwrap();
-        assert_eq!(agent_cfg.auth, SshAuth::Agent);
     }
+
+    #[test]
+    fn ssh_config_serde_agent_roundtrip() {
+        let cfg = SshConfig {
+            host: "h".to_string(),
+            port: 22,
+            username: "u".to_string(),
+            auth: SshAuth::Agent,
+        };
+        let json = serde_json::to_string(&cfg).unwrap();
+        assert!(json.contains("\"type\":\"agent\""), "got {}", json);
+        let back: SshConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(cfg, back);
+    }
+
+    #[test]
+    fn ssh_auth_default_is_agent() {
+        assert_eq!(SshAuth::default(), SshAuth::Agent);
+    }
+
+    #[test]
+    fn ssh_auth_as_str() {
+        assert_eq!(SshAuth::Agent.as_str(), "agent");
+        assert_eq!(
+            SshAuth::KeyFile {
+                path: "/x".to_string()
+            }
+            .as_str(),
+            "key_file"
+        );
+    }
+
+    // ====================================================================
+    // ConnectionInfo
+    // ====================================================================
 
     #[test]
     fn connection_info_empty_password_is_skipped() {
@@ -428,11 +542,72 @@ mod tests {
         let mut info = ConnectionInfo::default();
         info.password = String::new();
         let json = serde_json::to_string(&info).unwrap();
-        assert!(!json.contains("\"password\""), "unexpected password key: {}", json);
+        assert!(
+            !json.contains("\"password\""),
+            "unexpected password key: {}",
+            json
+        );
     }
 
     #[test]
-    fn connection_options_use_overridden_host_port() {
+    fn connection_info_default_has_no_ssh() {
+        let info = ConnectionInfo::default();
+        assert!(info.ssh.is_none());
+        assert_eq!(info.driver, DatabaseDriver::Postgres);
+    }
+
+    #[test]
+    fn connection_info_ssh_skipped_when_none() {
+        let info = ConnectionInfo::default();
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(
+            !json.contains("\"ssh\""),
+            "ssh should be skip_serializing_if=None: {}",
+            json
+        );
+    }
+
+    #[test]
+    fn connection_info_with_ssh_serde_roundtrip() {
+        let mut info = ConnectionInfo::default();
+        info.password = String::new(); // skipped by serde
+        info.driver = DatabaseDriver::MySql;
+        info.port = 3306;
+        info.ssh = Some(SshConfig {
+            host: "jump.example.com".to_string(),
+            port: 22,
+            username: "ops".to_string(),
+            auth: SshAuth::KeyFile {
+                path: "/home/ops/.ssh/id_rsa".to_string(),
+            },
+        });
+        let json = serde_json::to_string(&info).unwrap();
+        let back: ConnectionInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.driver, DatabaseDriver::MySql);
+        assert_eq!(back.port, 3306);
+        assert_eq!(back.ssh, info.ssh);
+    }
+
+    #[test]
+    fn connection_info_legacy_json_without_driver_or_ssh() {
+        // Older saved blobs (pre-MySQL/SSH) deserialize cleanly with
+        // serde defaults filling in the new fields.
+        let json = r#"{
+            "id": "00000000-0000-0000-0000-000000000001",
+            "name": "old",
+            "hostname": "db",
+            "username": "u",
+            "database": "d",
+            "port": 5432
+        }"#;
+        let info: ConnectionInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(info.driver, DatabaseDriver::Postgres);
+        assert!(info.ssh.is_none());
+        assert_eq!(info.ssl_mode, SslMode::Prefer);
+    }
+
+    #[test]
+    fn pg_connect_options_use_overridden_host_port() {
         // When a tunnel is in use we connect via 127.0.0.1:<random>;
         // make sure the override knobs actually substitute that endpoint.
         let mut info = ConnectionInfo::default();
@@ -442,6 +617,33 @@ mod tests {
         // sqlx exposes host()/port() on PgConnectOptions in 0.8.
         assert_eq!(opts.get_host(), "127.0.0.1");
         assert_eq!(opts.get_port(), 49152);
+    }
+
+    #[test]
+    fn mysql_connect_options_use_overridden_host_port() {
+        let mut info = ConnectionInfo::default();
+        info.driver = DatabaseDriver::MySql;
+        info.hostname = "mysql.internal".to_string();
+        info.port = 3306;
+        info.username = "app".to_string();
+        info.database = "appdb".to_string();
+        let opts = info.to_mysql_connect_options_for("127.0.0.1", 50001);
+        // MySqlConnectOptions also exposes get_host/get_port in sqlx 0.8.
+        assert_eq!(opts.get_host(), "127.0.0.1");
+        assert_eq!(opts.get_port(), 50001);
+    }
+
+    #[test]
+    fn pg_connect_options_carry_credentials_and_database() {
+        let mut info = ConnectionInfo::default();
+        info.username = "alice".to_string();
+        info.database = "appdb".to_string();
+        info.password = "secret".to_string();
+        let opts = info.to_pg_connect_options_for("db", 5432);
+        assert_eq!(opts.get_username(), "alice");
+        assert_eq!(opts.get_database(), Some("appdb"));
+        // Password is not exposed on get_* (good); we only assert
+        // construction didn't panic and the rest of the fields are right.
     }
 }
 

@@ -2,6 +2,8 @@
 
 mod connections;
 mod history;
+#[cfg(test)]
+mod migration_tests;
 mod types;
 
 pub use connections::ConnectionsRepository;

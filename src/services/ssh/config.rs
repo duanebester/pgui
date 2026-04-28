@@ -54,3 +54,48 @@ impl Default for SshConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_port_is_22() {
+        assert_eq!(SshConfig::default().port, 22);
+    }
+
+    #[test]
+    fn default_auth_is_agent() {
+        assert!(matches!(SshConfig::default().auth, SshAuth::Agent));
+    }
+
+    #[test]
+    fn ssh_auth_partial_eq() {
+        // Two KeyFile values with the same path are equal; differing paths
+        // are not. Important because the form uses PartialEq comparisons
+        // when deciding whether to re-prompt for a passphrase.
+        let a = SshAuth::KeyFile {
+            path: "/a".to_string(),
+        };
+        let b = SshAuth::KeyFile {
+            path: "/a".to_string(),
+        };
+        let c = SshAuth::KeyFile {
+            path: "/b".to_string(),
+        };
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+        assert_ne!(a, SshAuth::Agent);
+    }
+
+    #[test]
+    fn ssh_auth_serde_tagging() {
+        let json = serde_json::to_string(&SshAuth::Agent).unwrap();
+        assert_eq!(json, r#"{"type":"agent"}"#);
+        let json = serde_json::to_string(&SshAuth::KeyFile {
+            path: "/x".to_string(),
+        })
+        .unwrap();
+        assert_eq!(json, r#"{"type":"key_file","path":"/x"}"#);
+    }
+}

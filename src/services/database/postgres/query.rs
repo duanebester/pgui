@@ -1,184 +1,134 @@
-use futures::StreamExt;
-use futures::stream::BoxStream;
+//! PostgreSQL query execution and row → `QueryResult` conversion.
+
 use sqlx::postgres::types::Oid;
 use sqlx::postgres::{PgColumn, PgRow};
 use sqlx::query::Query;
 use sqlx::{Column, Execute as _, PgPool, Row, TypeInfo, ValueRef};
 use std::collections::{HashMap, HashSet};
 
-use crate::services::database::types::{ErrorResult, ModifiedResult};
-
-use super::manager::DatabaseManager;
-use super::types::{
-    QueryExecutionResult, QueryResult, ResultCell, ResultColumnMetadata, ResultRow, TableMetadata,
+use crate::services::database::types::{
+    ErrorResult, ModifiedResult, QueryExecutionResult, QueryResult, ResultCell,
+    ResultColumnMetadata, ResultRow,
 };
 
-impl DatabaseManager {
-    pub async fn execute_query_enhanced(&self, sql: &str) -> QueryExecutionResult {
-        let pool_guard = self.pool.read().await;
+/// Internal: maps OID -> qualified table name and (OID, column) -> nullable.
+pub(crate) struct TableMetadata {
+    pub oid_to_table_name: HashMap<Oid, String>,
+    pub column_nullable_map: HashMap<(Oid, String), bool>,
+}
 
-        let pool = match pool_guard.as_ref() {
-            Some(pool) => pool,
-            None => {
-                return QueryExecutionResult::Error(ErrorResult {
-                    message: "Database not connected".to_string(),
-                    execution_time_ms: 0,
-                });
-            }
-        };
-
-        let sql = sql.trim();
-        if sql.is_empty() {
-            return QueryExecutionResult::Error(ErrorResult {
-                message: "Empty query".to_string(),
-                execution_time_ms: 0,
-            });
-        }
-
-        if is_select_query(sql) {
-            self.execute_select_query(sql, pool).await
-        } else {
-            self.execute_modification_query(sql, pool).await
-        }
+pub async fn execute(pool: &PgPool, sql: &str) -> QueryExecutionResult {
+    let sql = sql.trim();
+    if sql.is_empty() {
+        return QueryExecutionResult::Error(ErrorResult {
+            message: "Empty query".to_string(),
+            execution_time_ms: 0,
+        });
     }
 
-    async fn execute_modification_query(&self, sql: &str, pool: &PgPool) -> QueryExecutionResult {
-        let start_time = std::time::Instant::now();
-        match sqlx::query(sql).execute(pool).await {
-            Ok(result) => {
-                let execution_time_ms = start_time.elapsed().as_millis();
-                QueryExecutionResult::Modified(ModifiedResult {
-                    rows_affected: result.rows_affected(),
-                    execution_time_ms,
-                })
-            }
-            Err(e) => {
-                let execution_time_ms = start_time.elapsed().as_millis();
-                QueryExecutionResult::Error(ErrorResult {
-                    message: format!("Query failed: {}", e),
-                    execution_time_ms,
-                })
-            }
-        }
-    }
-
-    pub(crate) async fn execute_internal_query(
-        &self,
-        query: Query<'_, sqlx::Postgres, sqlx::postgres::PgArguments>,
-        pool: &PgPool,
-    ) -> QueryExecutionResult {
-        let start_time = std::time::Instant::now();
-        let original_query = query.sql().to_string();
-
-        match query.fetch_all(pool).await {
-            Ok(rows) => {
-                let execution_time = start_time.elapsed().as_millis();
-
-                if rows.is_empty() {
-                    return QueryExecutionResult::Select(QueryResult {
-                        original_query,
-                        columns: vec![],
-                        rows: vec![],
-                        row_count: 0,
-                        execution_time_ms: execution_time,
-                    });
-                }
-
-                let metadata = fetch_table_metadata(&rows, pool).await;
-                let columns = build_column_metadata(&rows[0], &metadata);
-                let result_rows = convert_rows(&rows, &metadata);
-
-                QueryExecutionResult::Select(QueryResult {
-                    original_query,
-                    columns,
-                    rows: result_rows,
-                    row_count: rows.len(),
-                    execution_time_ms: execution_time,
-                })
-            }
-            Err(e) => {
-                let execution_time_ms = start_time.elapsed().as_millis();
-                QueryExecutionResult::Error(ErrorResult {
-                    message: format!("Query failed: {}", e),
-                    execution_time_ms,
-                })
-            }
-        }
-    }
-
-    pub(crate) async fn execute_select_query(
-        &self,
-        sql: &str,
-        pool: &PgPool,
-    ) -> QueryExecutionResult {
-        let start_time = std::time::Instant::now();
-        let original_query = sql.to_string();
-
-        let limited_sql = if !sql.to_lowercase().contains(" limit ") {
-            format!("{} LIMIT {}", sql.trim_end_matches(';'), 1_000)
-        } else {
-            sql.to_string()
-        };
-
-        match sqlx::query(limited_sql.as_ref()).fetch_all(pool).await {
-            Ok(rows) => {
-                let execution_time = start_time.elapsed().as_millis();
-
-                if rows.is_empty() {
-                    return QueryExecutionResult::Select(QueryResult {
-                        original_query,
-                        columns: vec![],
-                        rows: vec![],
-                        row_count: 0,
-                        execution_time_ms: execution_time,
-                    });
-                }
-
-                let metadata = fetch_table_metadata(&rows, pool).await;
-                let columns = build_column_metadata(&rows[0], &metadata);
-                let result_rows = convert_rows(&rows, &metadata);
-
-                QueryExecutionResult::Select(QueryResult {
-                    original_query,
-                    columns,
-                    rows: result_rows,
-                    row_count: rows.len(),
-                    execution_time_ms: execution_time,
-                })
-            }
-            Err(e) => {
-                let execution_time_ms = start_time.elapsed().as_millis();
-                QueryExecutionResult::Error(ErrorResult {
-                    message: format!("Query failed: {}", e),
-                    execution_time_ms,
-                })
-            }
-        }
-    }
-
-    /// Returns a stream of rows for large dataset exports
-    /// Caller is responsible for processing rows as they arrive
-    #[allow(dead_code)]
-    pub async fn stream_query<'a>(
-        &'a self,
-        sql: &'a str,
-    ) -> Result<BoxStream<'a, Result<PgRow, sqlx::Error>>, String> {
-        let pool_guard = self.pool.read().await;
-
-        let pool = match pool_guard.as_ref() {
-            Some(pool) => pool.clone(),
-            None => return Err("Database not connected".to_string()),
-        };
-
-        // fetch() instead of fetch_all() - returns a Stream
-        let stream = sqlx::query(sql).fetch(&pool);
-        Ok(stream.boxed())
+    if is_select_query(sql) {
+        execute_select_query(sql, pool).await
+    } else {
+        execute_modification_query(sql, pool).await
     }
 }
 
-// ============================================================================
-// Free functions for query processing
-// ============================================================================
+async fn execute_modification_query(sql: &str, pool: &PgPool) -> QueryExecutionResult {
+    let start_time = std::time::Instant::now();
+    match sqlx::query(sql).execute(pool).await {
+        Ok(result) => QueryExecutionResult::Modified(ModifiedResult {
+            rows_affected: result.rows_affected(),
+            execution_time_ms: start_time.elapsed().as_millis(),
+        }),
+        Err(e) => QueryExecutionResult::Error(ErrorResult {
+            message: format!("Query failed: {}", e),
+            execution_time_ms: start_time.elapsed().as_millis(),
+        }),
+    }
+}
+
+pub(crate) async fn execute_internal(
+    query: Query<'_, sqlx::Postgres, sqlx::postgres::PgArguments>,
+    pool: &PgPool,
+) -> QueryExecutionResult {
+    let start_time = std::time::Instant::now();
+    let original_query = query.sql().to_string();
+
+    match query.fetch_all(pool).await {
+        Ok(rows) => {
+            let execution_time = start_time.elapsed().as_millis();
+
+            if rows.is_empty() {
+                return QueryExecutionResult::Select(QueryResult {
+                    original_query,
+                    columns: vec![],
+                    rows: vec![],
+                    row_count: 0,
+                    execution_time_ms: execution_time,
+                });
+            }
+
+            let metadata = fetch_table_metadata(&rows, pool).await;
+            let columns = build_column_metadata(&rows[0], &metadata);
+            let result_rows = convert_rows(&rows, &metadata);
+
+            QueryExecutionResult::Select(QueryResult {
+                original_query,
+                columns,
+                rows: result_rows,
+                row_count: rows.len(),
+                execution_time_ms: execution_time,
+            })
+        }
+        Err(e) => QueryExecutionResult::Error(ErrorResult {
+            message: format!("Query failed: {}", e),
+            execution_time_ms: start_time.elapsed().as_millis(),
+        }),
+    }
+}
+
+async fn execute_select_query(sql: &str, pool: &PgPool) -> QueryExecutionResult {
+    let start_time = std::time::Instant::now();
+    let original_query = sql.to_string();
+
+    let limited_sql = if !sql.to_lowercase().contains(" limit ") {
+        format!("{} LIMIT {}", sql.trim_end_matches(';'), 1_000)
+    } else {
+        sql.to_string()
+    };
+
+    match sqlx::query(limited_sql.as_ref()).fetch_all(pool).await {
+        Ok(rows) => {
+            let execution_time = start_time.elapsed().as_millis();
+
+            if rows.is_empty() {
+                return QueryExecutionResult::Select(QueryResult {
+                    original_query,
+                    columns: vec![],
+                    rows: vec![],
+                    row_count: 0,
+                    execution_time_ms: execution_time,
+                });
+            }
+
+            let metadata = fetch_table_metadata(&rows, pool).await;
+            let columns = build_column_metadata(&rows[0], &metadata);
+            let result_rows = convert_rows(&rows, &metadata);
+
+            QueryExecutionResult::Select(QueryResult {
+                original_query,
+                columns,
+                rows: result_rows,
+                row_count: rows.len(),
+                execution_time_ms: execution_time,
+            })
+        }
+        Err(e) => QueryExecutionResult::Error(ErrorResult {
+            message: format!("Query failed: {}", e),
+            execution_time_ms: start_time.elapsed().as_millis(),
+        }),
+    }
+}
 
 fn is_select_query(sql: &str) -> bool {
     let lower = sql.to_lowercase();
@@ -324,12 +274,10 @@ fn build_cell_column_metadata(
 }
 
 fn decode_cell_value(row: &PgRow, column: &PgColumn, index: usize) -> (String, bool) {
-    // Try to decode as String first - Postgres can convert most types to text
     if let Ok(v) = row.try_get::<String, _>(index) {
         return (v, false);
     }
 
-    // If string decoding fails, try type-specific decoding
     match column.type_info().name() {
         "BOOL" => row
             .try_get::<bool, _>(index)

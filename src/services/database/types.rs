@@ -1,6 +1,4 @@
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::types::Oid;
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TableInfo {
@@ -128,12 +126,6 @@ pub enum QueryExecutionResult {
     Select(QueryResult),
     Modified(ModifiedResult),
     Error(ErrorResult),
-}
-
-/// Internal metadata for table/column resolution
-pub(crate) struct TableMetadata {
-    pub oid_to_table_name: HashMap<Oid, String>,
-    pub column_nullable_map: HashMap<(Oid, String), bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,6 +1,6 @@
 mod manager;
-mod query;
-mod schema;
+mod mysql;
+mod postgres;
 mod types;
 
 pub use manager::DatabaseManager;
@@ -11,7 +11,3 @@ pub use types::{
     IndexInfo, QueryExecutionResult, QueryResult, ResultCell, ResultColumnMetadata, ResultRow,
     TableInfo, TableSchema,
 };
-
-// TableMetadata is internal only
-#[allow(unused_imports)]
-pub(crate) use types::TableMetadata;
